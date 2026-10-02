@@ -34,7 +34,7 @@ class TaskCreate(TaskBase):
     priority: Priority = Priority.medium
     # deadline is optional; deadline validation only applies on Create.
 
-    @field_validator("deadline", mode="before")
+    @field_validator("deadline", mode="after")
     @classmethod
     def deadline_not_in_the_past(cls, v: Optional[date]) -> Optional[date]:
         if v is not None and v < date.today():
