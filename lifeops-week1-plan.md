@@ -226,7 +226,7 @@ This is **pure Python, no ML, no randomness** — fully deterministic and testab
 ---
 
 ### ST-3 — Pydantic Schemas
-**Status:** [ ] pending
+**Status:** [x] done
 
 **Intent:** Define request/response schemas that FastAPI will use for validation and serialization. These should mirror the TypeScript types the frontend will use.
 
