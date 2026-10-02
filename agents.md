@@ -1,4 +1,3 @@
-
 # LifeOps Project Context
 
 ## Project Goal
@@ -8,9 +7,11 @@ LifeOps is an auditable decision-support application that helps users organize p
 The system is intentionally divided into two layers:
 
 1. deterministic scheduling and business constraints;
-2. an AI decision layer planned for later phases.
+2. an AI recommendation and decision layer.
 
 Deterministic rules always have priority over AI recommendations.
+
+AI must never override hard scheduling constraints.
 
 ---
 
@@ -67,15 +68,12 @@ Pydantic validates request-local rules only.
 
 Rules that require persisted state are handled by the application layer after combining the database record with the incoming PATCH payload.
 
-Tests after ST-3:
-
-
-22 passed
-
 ### ST-4 — CRUD Routers & Application Rules
 
 Completed.
+
 Implemented:
+
 - FixedBlock CRUD;
 - Task CRUD;
 - ScheduledSlot read/delete endpoints;
@@ -85,46 +83,70 @@ Implemented:
 - conditional deadline validation;
 - consistent HTTP errors;
 - atomic ScheduledSlot deletion + Task status reset.
-Current test suite:
-58 passed
-0 failed
 
 ### ST-5 — Deterministic Availability Engine
 
 Completed.
 
 Implemented:
-- GET /api/v1/engine/suggest — returns up to 10 candidate slots ordered by start_datetime;
-- POST /api/v1/engine/book — validates and books a slot atomically;
-- app/services/engine.py — pure deterministic engine (no DB calls, no AI);
-- app/routers/engine.py — HTTP layer, full revalidation at booking time;
-- app/core/settings.py — WORK_START / WORK_END configurable working window;
-- overnight FixedBlock handling (D-1 tail contributes to day D);
-- adjacent interval merging (next.start <= current.end);
-- from_date in the past returns 422;
-- ScheduledSlot + Task.status transition in a single atomic commit;
-- 57 new tests (27 pure unit + 17 integration + 1 skipped conditional);
-- pre-existing 58 tests remain green.
+
+- GET /api/v1/engine/suggest;
+- POST /api/v1/engine/book;
+- configurable work window;
+- default 7-day lookahead;
+- maximum 10 suggestions;
+- optional from_date;
+- past from_date rejection;
+- deadline enforcement;
+- overnight FixedBlock handling;
+- previous-day overnight occupancy;
+- ScheduledSlot conflict detection;
+- merge of overlapping and adjacent intervals;
+- free interval calculation;
+- duration filtering;
+- booking-time conflict revalidation;
+- atomic slot creation + Task status update.
 
 Current test suite:
+
+
 114 passed
 0 failed
-1 skipped (test_book_exceeds_deadline — time-conditional, skips after 21:30)
+1 skipped
 
-### Current Next Step: ST-6 — React Frontend (Minimal).
-
-Do not start AI implementation during ST-6.
-Week 1 Goal
-Build a fully functional MVP without AI.
-Target flow:
+The skipped test is time-dependent and is tracked as technical debt.
+Week 1 Status
+Week 1 MVP is complete.
+The application now supports:
 React
 -> FastAPI
 -> MySQL
 -> deterministic availability engine
 -> slot suggestions
--> user confirmation
+-> user confirmation / booking
 
-AI is intentionally excluded from Week 1.
+No AI was used for hard scheduling decisions.
+Current Next Phase
+Week 2 — AI Decision Layer.
+The AI layer must consume only slots that have already been validated by the deterministic engine.
+The AI layer must not create availability or bypass scheduling constraints.
+Week 2 Goal
+Add explainable AI recommendations on top of the deterministic scheduling engine.
+Target flow:
+Deterministic Engine
+        ↓
+Valid Slots
+        ↓
+Planner Agent
+        ↓
+Recommendation
+        ↓
+Explanation
+        ↓
+Human Approval / Rejection
+        ↓
+Audit Trail
+
 Approved Stack
 Frontend
 - React
@@ -149,9 +171,14 @@ Planned Deployment
 - Vercel
 - Azure App Service
 - Azure Database for MySQL
-Future AI
+AI
+Planned primary provider:
 - IBM watsonx
-- Granite models
+- IBM Granite models
+Possible fallback provider only if explicitly approved:
+- Gemini
+Agentic Development
+- IBM Bob
 Architecture Principles
 - Keep the architecture simple.
 - Avoid premature microservices.
@@ -161,10 +188,13 @@ Architecture Principles
 - Prefer readable code over clever abstractions.
 - Business constraints must remain deterministic.
 - AI must never override hard scheduling constraints.
+- AI must receive only valid deterministic options.
 - Users remain in control of final scheduling decisions.
-- Future AI recommendations must be auditable.
+- AI recommendations must be auditable.
+- AI outputs should be structured.
+- Do not store hidden chain-of-thought.
+- Store concise decision explanations instead.
 - Derived domain fields are computed server-side.
-- Partial PATCH requests must be merged with persisted state before complete-state validation.
 - Credentials must come from environment variables.
 - Never commit secrets.
 - Do not silently change approved architecture.
@@ -179,7 +209,7 @@ Supported recurrence types:
 weekly
 once
 
-### Rules:
+Rules:
 - weekly requires weekday;
 - weekly forbids date;
 - once requires date;
@@ -189,20 +219,6 @@ once
 - blocks may cross midnight;
 - spans_next_day is derived server-side;
 - spans_next_day = end_time < start_time.
-For PATCH:
-existing state
-+
-incoming fields
-↓
-candidate state
-↓
-validate candidate
-↓
-calculate derived fields
-↓
-persist
-
-Never validate complete-state rules using only a partial PATCH payload.
 Task
 Tasks represent work that should be scheduled.
 Rules:
@@ -212,7 +228,6 @@ Rules:
 - existing tasks may naturally become overdue;
 - new tasks start as pending;
 - TaskUpdate does not expose status.
-Status transitions must happen through domain actions.
 Current statuses:
 pending
 scheduled
@@ -221,82 +236,48 @@ done
 ScheduledSlot
 ScheduledSlot represents a confirmed task allocation.
 Rules:
-- one Task may have at most one ScheduledSlot in Week 1;
+- one Task may have at most one ScheduledSlot;
 - generic ScheduledSlot creation is not exposed;
-- creation will happen through POST /engine/book;
+- creation happens through POST /engine/book;
 - deleting a ScheduledSlot resets the related Task to pending;
 - status reset and slot deletion must happen atomically.
-ST-5 Scope
-ST-5 must implement the deterministic scheduling engine.
-Expected endpoints:
-GET  /api/v1/engine/suggest
-POST /api/v1/engine/book
-
-ST-5 Engine Rules
+Deterministic Engine Rules
+The deterministic engine is authoritative for hard constraints.
+It must remain independent from AI.
 Suggest
-The suggest flow must:
-1. load the Task by task_id and user_id=1;
-2. return 404 if task does not exist;
-3. reject tasks that are not pending;
-4. use default lookahead of 7 days;
-5. use configurable daily working window;
-6. collect FixedBlocks relevant to each day;
-7. collect existing ScheduledSlots;
-8. normalize all occupied intervals;
-9. include previous-day overnight FixedBlocks;
-10. merge overlapping occupied intervals;
-11. compute free intervals;
-12. keep only intervals that fit task.duration_minutes;
-13. respect the Task deadline;
-14. return candidate slots ordered deterministically.
-The engine must not use AI.
-Overnight FixedBlocks
-Example:
-Monday
-18:00 → 06:00
-spans_next_day = true
+GET /api/v1/engine/suggest:
+1. loads the Task;
+2. requires Task.status == pending;
+3. uses configurable work window;
+4. uses default 7-day lookahead;
+5. accepts optional from_date;
+6. rejects past from_date;
+7. collects relevant FixedBlocks;
+8. includes overnight occupancy from the previous day;
+9. collects ScheduledSlots;
+10. normalizes intervals;
+11. merges overlapping and adjacent intervals;
+12. computes free intervals;
+13. filters by duration;
+14. respects deadline;
+15. returns at most 10 suggestions ordered by start_datetime ascending.
+Deadline
+A task must start and finish within the configured working window of the deadline date.
+Inclusive boundary:
+end_datetime <= datetime.combine(task.deadline, WORK_END)
 
-The occupied intervals are:
-Monday   18:00 → midnight
-Tuesday  midnight → 06:00
-
-When calculating availability for day D, the engine must inspect:
-FixedBlocks matching D
-+
-overnight FixedBlocks from D-1
-
-Interval Logic
-Prefer pure functions.
-Suggested conceptual flow:
-occupied intervals
-↓
-sort by start
-↓
-merge overlaps
-↓
-calculate gaps
-↓
-filter by required duration
-↓
-candidate slots
-
-Avoid unnecessary classes or scheduling frameworks.
-Deadline Behavior
-A Task deadline limits candidate generation.
-Do not suggest a slot after the deadline.
-The exact interpretation of whether the task must finish before the end of the deadline date must be explicit in the ST-5 plan before implementation.
-Do not silently choose semantics.
+A task ending exactly at WORK_END on the deadline date is valid.
 Booking
-POST /engine/book must never trust a previous suggestion.
-It must revalidate availability at booking time.
+POST /api/v1/engine/book must always revalidate current availability.
+It must never trust a previously generated suggestion.
 Expected flow:
 load Task
 ↓
 validate pending
 ↓
-calculate end_datetime
+compute end_datetime
 ↓
-check deadline
+validate deadline
 ↓
 check FixedBlock collision
 ↓
@@ -308,7 +289,62 @@ Task.status = scheduled
 ↓
 single atomic commit
 
-The database UNIQUE constraint on ScheduledSlot.task_id remains a final safety guard.
+Week 2 AI Rules
+The AI layer must not decide whether a slot is valid.
+Validity belongs exclusively to the deterministic engine.
+The AI layer may:
+- rank valid slots;
+- recommend one of the valid slots;
+- explain why it recommends a slot;
+- consider Task priority;
+- consider deadline proximity;
+- consider user feedback;
+- compare multiple valid options.
+The AI layer must not:
+- invent unavailable slots;
+- bypass FixedBlocks;
+- bypass ScheduledSlots;
+- schedule outside the work window;
+- ignore deadlines;
+- directly mutate Task.status;
+- book without deterministic revalidation.
+Explainability Rules
+Do not store hidden chain-of-thought.
+Store structured explanations instead.
+Example:
+{
+  "recommended_slot": "2026-10-05T14:00:00",
+  "reason_codes": [
+    "DEADLINE_CLOSE",
+    "HIGH_PRIORITY",
+    "EARLY_VALID_SLOT"
+  ],
+  "explanation": "This slot was recommended because the task has a close deadline and this is one of the earliest valid windows."
+}
+
+Future AI responses should prefer structured JSON-like outputs over free-form prose.
+Human-in-the-Loop Rules
+AI recommendations are suggestions.
+The user must be able to:
+Approve
+Modify
+Reject
+
+Booking must only occur after explicit user confirmation.
+Future feedback should be stored for auditability and later analysis.
+Planned Auditability
+Future AI decisions should record:
+- decision id;
+- timestamp;
+- task id;
+- model/provider;
+- candidate slots;
+- recommended slot;
+- reason codes;
+- concise explanation;
+- user action;
+- final selected slot.
+Do not store sensitive secrets or hidden model reasoning.
 Error Handling Principles
 Use standard FastAPI errors.
 Examples:
@@ -316,41 +352,39 @@ Examples:
 resource not found
 
 409
-state conflict / already scheduled
+state conflict
 
 422
 invalid business input
 
-Do not create a custom exception framework unless a real need appears.
+Do not create a custom exception framework unless there is a real need.
 Testing Principles
 Tests must not connect to the real development MySQL database.
-Router/integration tests currently use:
+Current integration tests use:
 - SQLite in-memory;
 - StaticPool;
 - check_same_thread=False;
 - foreign_keys enabled;
 - get_db dependency override.
-ST-5 should include:
-- pure engine unit tests;
-- engine router integration tests;
-- overnight cases;
-- overlapping intervals;
-- adjacent intervals;
-- full-day occupancy;
-- empty schedule;
-- task exactly fitting a free interval;
-- deadline boundaries;
-- booking conflict revalidation;
-- task already scheduled;
-- duplicate booking protection.
+Future AI tests should:
+- mock external AI providers;
+- never require real watsonx credentials in unit tests;
+- validate structured output;
+- validate invalid AI output handling;
+- verify deterministic constraints remain authoritative;
+- verify booking still revalidates availability.
 Do not reduce existing test coverage.
 Current Known Technical Debt
-SQLAlchemy 2.1 currently emits one deprecation warning related to the nullable date annotation in:
+SQLAlchemy warning
+SQLAlchemy 2.1 emits one deprecation warning related to the nullable date annotation in:
 models/fixed_block.py
 
-The warning does not affect current functionality.
-Do not modify it unless:
-- it causes a functional issue; or
+It does not currently affect functionality.
+Time-dependent test
+One deadline-related booking test is currently skipped depending on the current time of day.
+Future cleanup should make time-based tests deterministic by injecting or freezing the clock instead of relying directly on the real current time.
+Do not modify these items unless:
+- they cause a functional issue; or
 - a dedicated cleanup task is approved.
 Development Workflow
 For every major sub-task:
@@ -382,9 +416,6 @@ Commit
 
 Do Not Implement Yet
 Until explicitly approved, do not add:
-- AI;
-- watsonx integration;
-- Granite integration;
 - authentication;
 - OAuth;
 - Redis;
@@ -393,6 +424,9 @@ Until explicitly approved, do not add:
 - microservices;
 - Kubernetes;
 - OpenShift;
-- production UI redesign.
-Those belong to later phases.
-```
+- production UI redesign;
+- additional AI providers;
+- autonomous booking without user confirmation.
+Those belong to later phases or require explicit approval.
+
+Esse é o momento certo para atualizar, porque agora o `AGENTS.md` deixa de ser “guia da Semana 1” e passa a preparar o Bob para a fase que realmente diferencia o projeto: **IA em cima de uma base determinística já validada**.
