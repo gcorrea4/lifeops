@@ -12,15 +12,26 @@ services:
       - mysql_data:/var/lib/mysql
     ports:
       - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   api:
     build: ./backend
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Override DB_HOST so the API reaches MySQL via the Docker service name,
+      # not "localhost" (which is what .env contains for local dev outside Docker).
+      DB_HOST: db
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
 volumes:
   mysql_data:

@@ -71,6 +71,7 @@ Represents an immovable time commitment (class, work shift, appointment).
 | date | date? | null if `weekly` |
 | start_time | time | |
 | end_time | time | |
+| spans_next_day | bool | default FALSE; TRUE when end_time < start_time (overnight) |
 | created_at | datetime | |
 
 ### Task
@@ -194,25 +195,33 @@ This is **pure Python, no ML, no randomness** — fully deterministic and testab
 ---
 
 ### ST-2 — Database Models & Migrations
-**Status:** [ ] pending
+**Status:** [x] done
 
 **Intent:** Define SQLAlchemy models for the three entities and run the initial migration so the schema exists in MySQL.
 
 **Expected Outcomes:**
 - Tables `fixed_blocks`, `tasks`, `scheduled_slots` exist in MySQL with correct columns.
-- Alembic (or `Base.metadata.create_all`) applied cleanly.
+- `Base.metadata.create_all` applied cleanly via FastAPI lifespan handler.
 - Models importable from `app/models/`.
 
 **Todo List:**
-1. Add SQLAlchemy + Alembic (or use `create_all` for MVP simplicity) to `requirements.txt`.
-2. Create `app/database.py` — engine, SessionLocal, Base.
-3. Create `app/models/fixed_block.py`, `task.py`, `scheduled_slot.py` per entity spec above.
-4. Create enums (`RecurrenceType`, `Priority`, `TaskStatus`) in `app/models/enums.py`.
-5. Run migration / `create_all` and confirm tables via MySQL client.
+1. Add `cryptography` to `requirements.txt` (required by PyMySQL for MySQL 8 auth).
+2. Create `app/database.py` — engine, SessionLocal, Base, `get_db` dependency.
+3. Create `app/models/enums.py` — `RecurrenceType`, `Priority`, `TaskStatus`.
+4. Create `app/models/fixed_block.py` — includes `spans_next_day` column and CHECK constraints.
+5. Create `app/models/task.py` — includes CHECK `duration_minutes > 0`.
+6. Create `app/models/scheduled_slot.py` — FK to `tasks`, UNIQUE on `task_id`, CHECK `end_datetime > start_datetime`.
+7. Create `app/models/__init__.py` — import all models so Base sees them before `create_all`.
+8. Update `app/main.py` — replace any startup event with a `lifespan` context manager that calls `Base.metadata.create_all`.
+9. Confirm tables exist in MySQL after container restart.
 
 **Relevant Context:**
-- Entity definitions are in the Entities section of this plan.
 - `user_id` is not a FK (no users table in Week 1); just an int column.
+- `spans_next_day = True` when a FixedBlock crosses midnight (e.g. 18:00–06:00). The engine (ST-5) must split overnight blocks into two intervals: `[start_time, 24:00)` on day D and `[00:00, end_time]` on day D+1.
+- `scheduled_slots.task_id` has a UNIQUE constraint — one active slot per task for Week 1. DELETE + re-book is the workflow for rescheduling.
+- `scheduled_slots.end_datetime` is always computed by the API as `start_datetime + task.duration_minutes`; the client never sends it.
+- Use `lifespan` (not deprecated `@app.on_event`) for startup table creation.
+- The `end_time > start_time` CHECK on `fixed_blocks` is intentionally absent — replaced by the `spans_next_day` flag. No DB-level check on the time ordering of that table.
 
 ---
 
