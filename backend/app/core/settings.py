@@ -1,3 +1,5 @@
+from datetime import time
+
 from pydantic_settings import BaseSettings
 
 
@@ -7,6 +9,8 @@ class Settings(BaseSettings):
     DB_NAME: str = "lifeops"
     DB_USER: str = "root"
     DB_PASSWORD: str = ""
+    WORK_START: time = time(8, 0)
+    WORK_END: time = time(22, 0)
 
     @property
     def DATABASE_URL(self) -> str:

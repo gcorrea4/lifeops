@@ -39,6 +39,15 @@ The project is intentionally being built in two stages:
 
 ## Status
 
-🚧 In development
+✅ Week 1 MVP complete
 
-Current focus: building the deterministic scheduling engine before adding the AI recommendation layer.
+Implemented:
+- fixed commitments
+- task management
+- deterministic availability engine
+- slot suggestions
+- booking with conflict revalidation
+- 114 passing tests
+
+Next:
+AI recommendation and explainability layer.

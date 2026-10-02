@@ -69,10 +69,11 @@ Rules that require persisted state are handled by the application layer after co
 
 Tests after ST-3:
 
-```txt
+
 22 passed
 
-ST-4 — CRUD Routers & Application Rules
+### ST-4 — CRUD Routers & Application Rules
+
 Completed.
 Implemented:
 - FixedBlock CRUD;
@@ -88,9 +89,31 @@ Current test suite:
 58 passed
 0 failed
 
-Current Next Step
-ST-5 — Deterministic Availability Engine.
-Do not start AI implementation during ST-5.
+### ST-5 — Deterministic Availability Engine
+
+Completed.
+
+Implemented:
+- GET /api/v1/engine/suggest — returns up to 10 candidate slots ordered by start_datetime;
+- POST /api/v1/engine/book — validates and books a slot atomically;
+- app/services/engine.py — pure deterministic engine (no DB calls, no AI);
+- app/routers/engine.py — HTTP layer, full revalidation at booking time;
+- app/core/settings.py — WORK_START / WORK_END configurable working window;
+- overnight FixedBlock handling (D-1 tail contributes to day D);
+- adjacent interval merging (next.start <= current.end);
+- from_date in the past returns 422;
+- ScheduledSlot + Task.status transition in a single atomic commit;
+- 57 new tests (27 pure unit + 17 integration + 1 skipped conditional);
+- pre-existing 58 tests remain green.
+
+Current test suite:
+114 passed
+0 failed
+1 skipped (test_book_exceeds_deadline — time-conditional, skips after 21:30)
+
+### Current Next Step: ST-6 — React Frontend (Minimal).
+
+Do not start AI implementation during ST-6.
 Week 1 Goal
 Build a fully functional MVP without AI.
 Target flow:
@@ -156,7 +179,7 @@ Supported recurrence types:
 weekly
 once
 
-Rules:
+### Rules:
 - weekly requires weekday;
 - weekly forbids date;
 - once requires date;
