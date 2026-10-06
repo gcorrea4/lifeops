@@ -92,7 +92,15 @@ class WatsonxProvider(AbstractProvider):
                 params={"temperature": 0, "max_new_tokens": 512},
             )
             response = model.generate_text(prompt=prompt)
-            return response
+            if isinstance(response, str):
+                return response
+            if isinstance(response, dict):
+                text = response.get("generated_text", "")
+                if isinstance(text, str):
+                    return text
+            raise ProviderError(
+                f"Unexpected response type from generate_text: {type(response)}"
+            )
         except Exception as exc:
             raise ProviderError(f"watsonx completion failed: {exc}") from exc
 
