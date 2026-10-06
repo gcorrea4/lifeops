@@ -6,6 +6,7 @@ import app.models  # noqa: F401 — registers all models with Base.metadata
 from app.database import Base, engine
 from app.routers.blocks import router as blocks_router
 from app.routers.engine import router as engine_router
+from app.routers.planner import router as planner_router
 from app.routers.slots import router as slots_router
 from app.routers.tasks import router as tasks_router
 
@@ -24,6 +25,7 @@ app.include_router(blocks_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(slots_router, prefix="/api/v1")
 app.include_router(engine_router, prefix="/api/v1")
+app.include_router(planner_router, prefix="/api/v1")
 
 
 @app.get("/health")

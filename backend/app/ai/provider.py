@@ -25,6 +25,24 @@ class ConfigurationError(Exception):
 class AbstractProvider(ABC):
     """Minimal interface every AI provider must implement."""
 
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        """Human-readable name of this provider (e.g. 'watsonx', 'mock').
+
+        Used exclusively for audit persistence — never for routing logic.
+        """
+
+    @property
+    @abstractmethod
+    def model_id(self) -> str:
+        """Model identifier used by this provider instance.
+
+        For WatsonxProvider this is settings.WATSONX_MODEL_ID.
+        For MockProvider this is the literal string 'mock'.
+        Used exclusively for audit persistence.
+        """
+
     @abstractmethod
     def complete(self, prompt: str) -> str:
         """Send *prompt* to the model and return the raw string response."""
@@ -41,6 +59,14 @@ class WatsonxProvider(AbstractProvider):
     module can be imported without the SDK installed (e.g. when tests use
     MockProvider).
     """
+
+    @property
+    def provider_name(self) -> str:
+        return "watsonx"
+
+    @property
+    def model_id(self) -> str:
+        return settings.WATSONX_MODEL_ID
 
     def complete(self, prompt: str) -> str:
         try:
@@ -81,6 +107,14 @@ class MockProvider(AbstractProvider):
 
     def __init__(self, fixed_response: str) -> None:
         self._response = fixed_response
+
+    @property
+    def provider_name(self) -> str:
+        return "mock"
+
+    @property
+    def model_id(self) -> str:
+        return "mock"
 
     def complete(self, prompt: str) -> str:  # noqa: ARG002
         return self._response
