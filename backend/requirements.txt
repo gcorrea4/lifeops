@@ -5,3 +5,4 @@ pymysql
 cryptography
 python-dotenv
 pydantic-settings
+ibm-watsonx-ai

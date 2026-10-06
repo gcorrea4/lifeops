@@ -370,7 +370,7 @@ All three steps — recommend, decision, book — are intentionally independent.
 
 ### ST-6 — AI Layer Foundation
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 **Intent:**
 Establish the foundation that all other AI sub-tasks depend on:
@@ -409,12 +409,13 @@ new environment variables, and the `ai_recommendations` database table.
 
 ### ST-7 — Planner Agent
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 **Intent:**
 Implement the `PlannerAgent` class that constructs the prompt, calls the provider,
 validates the structured response, enforces the candidate-list guard, and activates
-fallback when needed.
+fallback when needed. Also tighten `get_provider` to reject unknown provider names
+explicitly instead of silently falling back to MockProvider.
 
 **Expected Outcomes:**
 - `backend/app/ai/agent.py` contains `PlannerAgent` class.
@@ -424,24 +425,127 @@ fallback when needed.
 - Recommended slot not in candidate list triggers fallback, never a 500.
 - Provider network failure triggers fallback, never a 500.
 - `fallback_used` is `True` when any fallback path is taken.
+- Empty candidate list raises `ValueError` (caller returns 422).
 - `ibm-watsonx-ai` added to `requirements.txt`.
+- `get_provider` raises `ConfigurationError` for unknown `AI_PROVIDER` values.
+- `PlannerRecommendation.explanation` is capped at 200 characters via Pydantic `Field`.
+- 14 unit tests pass in `backend/tests/test_planner_agent.py`.
+
+**Detailed Design Decisions:**
+
+### Class structure
+```
+PlannerAgent
+  __init__(provider: AbstractProvider)
+  recommend(agent_input: AgentInput) -> PlannerRecommendation          [public]
+  _build_prompt(agent_input: AgentInput) -> str                        [private]
+  _parse_response(raw: str, candidates: list[CandidateSlot])
+      -> PlannerRecommendation | None                                   [private]
+  _fallback(candidates: list[CandidateSlot]) -> PlannerRecommendation  [private]
+```
+
+### Prompt contract
+- Candidate slots presented as a numbered list with explicit `candidate_id` (0-based index)
+  plus `start_datetime` / `end_datetime` in ISO 8601.
+- Lists every allowed reason code except PROVIDER_FALLBACK (reserved for system use).
+- Instructs model: return ONLY a JSON object, no prose outside JSON.
+- explanation must be one sentence, max 200 characters.
+
+### Prompt candidate slot format (sent to model)
+```
+Candidate slots:
+[
+  {"candidate_id": 0, "start_datetime": "...", "end_datetime": "..."},
+  {"candidate_id": 1, "start_datetime": "...", "end_datetime": "..."}
+]
+```
+
+### Model output contract
+```json
+{
+  "recommended_candidate_id": 1,
+  "reason_codes": ["DEADLINE_CLOSE", "HIGH_PRIORITY"],
+  "explanation": "One sentence, max 200 characters."
+}
+```
+
+The model returns **only the integer index** of the chosen candidate.
+It never reproduces, modifies, or invents datetime strings.
+
+### Slot identification and equality rule
+`recommended_candidate_id` must be an integer in the range `[0, len(candidates) - 1]`.
+The backend looks up `candidates[recommended_candidate_id]` to obtain the original
+`start_datetime` and `end_datetime` from the deterministic engine.
+No timezone normalisation, no datetime string comparison — the model never touches the datetimes.
+
+### Parsing steps (_parse_response)
+1. Strip markdown fences if present.
+2. `json.loads()` — JSONDecodeError → return None.
+3. Pydantic `model_validate` on internal raw model — ValidationError → return None.
+4. Validate `recommended_candidate_id` is an int in `[0, len(candidates) - 1]` — out of range → return None.
+5. Convert each reason code string to `ReasonCode` enum — unknown string → return None.
+6. Reject `PROVIDER_FALLBACK` in model output → return None.
+7. Retrieve `chosen = candidates[recommended_candidate_id]`.
+8. Truncate explanation to 200 chars (defensive, not a fallback trigger).
+9. Return valid `PlannerRecommendation(fallback_used=False)` using `chosen.start_datetime` / `chosen.end_datetime`.
+
+### Fallback paths
+| Trigger | Path |
+|---|---|
+| ProviderError | except in recommend |
+| JSONDecodeError | _parse_response returns None |
+| ValidationError | _parse_response returns None |
+| recommended_candidate_id out of range | _parse_response returns None |
+| Unknown reason code | _parse_response returns None |
+| PROVIDER_FALLBACK in model output | _parse_response returns None |
+| Any other Exception in _parse_response | _parse_response returns None |
+
+_fallback always selects `candidates[0]` (earliest slot, ordered by deterministic engine).
+Sets fallback_used=True, reason_codes=[PROVIDER_FALLBACK].
+
+### Empty candidates
+recommend() raises ValueError before calling provider.
+_fallback is never called on an empty list.
+
+### provider.py changes
+Add `ConfigurationError` exception class.
+`get_provider`: explicit if/elif for "mock" and "watsonx"; else raise ConfigurationError.
 
 **Todo List:**
-1. Create `backend/app/ai/agent.py` — `PlannerAgent` class.
-2. Implement `_build_prompt(agent_input: AgentInput) -> str`.
-3. Implement `_parse_response(raw: str, candidates: list) -> PlannerRecommendation`.
-4. Implement `_fallback(candidates: list, reason: str) -> PlannerRecommendation`.
-5. Implement `recommend(agent_input: AgentInput) -> PlannerRecommendation`.
-6. Add `ibm-watsonx-ai` to `backend/requirements.txt`.
+1. Add `ConfigurationError` to `backend/app/ai/provider.py` and tighten `get_provider`.
+2. Add `max_length=200` Field constraint to `PlannerRecommendation.explanation` in `backend/app/ai/schemas.py`.
+3. Create `backend/app/ai/agent.py` with `PlannerAgent` class.
+4. Implement `_build_prompt(agent_input: AgentInput) -> str`.
+5. Implement `_parse_response(raw: str, candidates: list[CandidateSlot]) -> PlannerRecommendation | None`.
+6. Implement `_fallback(candidates: list[CandidateSlot]) -> PlannerRecommendation`.
+7. Implement `recommend(agent_input: AgentInput) -> PlannerRecommendation`.
+8. Add `ibm-watsonx-ai` to `backend/requirements.txt`.
+9. Create `backend/tests/test_planner_agent.py` with 14 unit tests.
 
 **Relevant Context:**
-- `backend/app/ai/provider.py` — `AbstractProvider` interface.
-- `backend/app/ai/schemas.py` — `AgentInput`, `PlannerRecommendation`, `ReasonCode`.
-- Prompt must be minimal and directive: instruct the model to return only a JSON object
-  matching the output schema, using only slots from the candidate list.
-- The prompt must include the task fields (title, priority, deadline, duration) and the
-  candidate slots as a numbered list with ISO 8601 datetimes.
-- Do not include user PII, internal IDs beyond task_id, or raw DB fields.
+- `backend/app/ai/provider.py` — `AbstractProvider`, `ProviderError`, `get_provider`.
+- `backend/app/ai/schemas.py` — `AgentInput`, `CandidateSlot`, `PlannerRecommendation`, `ReasonCode`, `RecommendedSlot`.
+- No DB, no router, no service layer — pure unit work.
+- All tests use `MockProvider`; no real credentials required.
+
+**Test coverage (13 tests in test_planner_agent.py):**
+1. `test_recommend_valid_response` — happy path, model returns candidate_id=1, fallback_used=False, slot matches candidates[1]
+2. `test_recommend_fallback_provider_error` — ProviderError → fallback, candidates[0] returned
+3. `test_recommend_fallback_invalid_json` — "not json" → fallback
+4. `test_recommend_fallback_pydantic_error` — missing recommended_candidate_id → fallback
+5. `test_recommend_fallback_unknown_reason_code` — "MADE_UP" code → fallback
+6. `test_recommend_fallback_provider_fallback_in_output` — model self-declares PROVIDER_FALLBACK → fallback
+7. `test_recommend_fallback_candidate_id_out_of_range` — candidate_id=99 → fallback (replaces timezone/datetime match tests)
+8. `test_recommend_fallback_candidate_id_negative` — candidate_id=-1 → fallback
+9. `test_recommend_raises_on_empty_candidates` — ValueError raised
+10. `test_recommend_explanation_truncated` — explanation > 200 chars → truncated, no fallback
+11. `test_recommend_only_slot_available` — single candidate, candidate_id=0 → valid recommendation
+12. `test_recommend_json_with_code_fences` — markdown fences stripped, no fallback
+13. `test_get_provider_mock` — AI_PROVIDER="mock" → MockProvider instance returned
+14. `test_get_provider_invalid` — AI_PROVIDER="openai" → ConfigurationError raised
+
+Note: tests 7 and 8 replace the previous timezone-suffix and datetime-matching tests —
+those concerns are eliminated entirely by the candidate_id design.
 
 ---
 

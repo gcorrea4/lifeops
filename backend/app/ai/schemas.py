@@ -14,7 +14,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -106,5 +106,5 @@ class PlannerRecommendation(BaseModel):
 
     recommended_slot: RecommendedSlot
     reason_codes: list[ReasonCode]
-    explanation: str
+    explanation: str = Field(max_length=200)
     fallback_used: bool = False

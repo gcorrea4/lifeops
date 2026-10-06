@@ -18,6 +18,10 @@ class ProviderError(Exception):
     """Raised by a provider when the upstream call fails."""
 
 
+class ConfigurationError(Exception):
+    """Raised when the AI_PROVIDER setting contains an unrecognised value."""
+
+
 class AbstractProvider(ABC):
     """Minimal interface every AI provider must implement."""
 
@@ -91,13 +95,20 @@ def get_provider() -> AbstractProvider:
     FastAPI dependency that returns the active AbstractProvider instance.
 
     Selection is driven by settings.AI_PROVIDER:
+      "mock"    -> MockProvider (returns empty JSON object; tests instantiate directly)
       "watsonx" -> WatsonxProvider
-      "mock"    -> MockProvider (returns empty JSON object; tests override this)
+
+    Any other value raises ConfigurationError at startup time — there is no silent
+    fallback to MockProvider for unknown names.
 
     Tests override this dependency via app.dependency_overrides[get_provider].
     """
     provider_name = settings.AI_PROVIDER.lower()
+    if provider_name == "mock":
+        return MockProvider(fixed_response="{}")
     if provider_name == "watsonx":
         return WatsonxProvider()
-    # Default / "mock" — safe fallback that will not make network calls.
-    return MockProvider(fixed_response="{}")
+    raise ConfigurationError(
+        f"Unknown AI_PROVIDER value: {settings.AI_PROVIDER!r}. "
+        "Supported values: 'mock', 'watsonx'."
+    )
