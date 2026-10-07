@@ -23,31 +23,38 @@ from pydantic import BaseModel, Field
 
 class ReasonCode(str, Enum):
     """
-    Vocabulary of explanatory codes the Planner Agent may attach to a
-    recommendation.  New codes must be added here before the agent can use them.
+    Vocabulary of explanatory codes attached to a recommendation.
+
+    All codes except PROVIDER_FALLBACK are derived deterministically by the
+    backend after the model selects a valid candidate_id.  The model never
+    supplies reason codes; it supplies only a candidate_id and an explanation.
     """
 
     DEADLINE_CLOSE = "DEADLINE_CLOSE"
-    """Task deadline is within 48 hours of the recommended slot."""
+    """Applied when the selected slot falls on the deadline date or the
+    calendar day immediately before it:
+    (deadline - selected_candidate.date).days <= 1."""
 
     HIGH_PRIORITY = "HIGH_PRIORITY"
-    """Task priority is 'high'."""
+    """Applied when task.priority == 'high'."""
 
     MEDIUM_PRIORITY = "MEDIUM_PRIORITY"
-    """Task priority is 'medium'."""
+    """Applied when task.priority == 'medium'."""
+
+    LOW_PRIORITY = "LOW_PRIORITY"
+    """Applied when task.priority == 'low'."""
 
     EARLIEST_SLOT = "EARLIEST_SLOT"
-    """The recommended slot is the first available among the candidates."""
-
-    MOST_BUFFER_BEFORE_DEADLINE = "MOST_BUFFER_BEFORE_DEADLINE"
-    """The recommended slot leaves the most time before the deadline."""
+    """Applied when the selected candidate_id == 0 (engine returns candidates
+    in ascending start order, so index 0 is definitionally the earliest)."""
 
     ONLY_SLOT_AVAILABLE = "ONLY_SLOT_AVAILABLE"
-    """Only one candidate slot was provided by the deterministic engine."""
+    """Applied when only one candidate slot was provided by the deterministic
+    engine (len(candidates) == 1)."""
 
     PROVIDER_FALLBACK = "PROVIDER_FALLBACK"
-    """AI provider failed or returned invalid output; the first valid candidate
-    was selected deterministically as a safe fallback."""
+    """System-only.  Applied when the AI provider failed or returned an invalid
+    response; the first valid candidate is selected deterministically."""
 
 
 # ---------------------------------------------------------------------------

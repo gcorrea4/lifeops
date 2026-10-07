@@ -25,10 +25,11 @@ from app.models.task import Task
 USER_ID = 1
 
 # A valid MockProvider response that PlannerAgent._parse_response() will accept.
+# The model now returns only recommended_candidate_id and explanation.
+# reason_codes are derived deterministically by the backend.
 _VALID_MOCK_RESPONSE = json.dumps(
     {
         "recommended_candidate_id": 0,
-        "reason_codes": ["EARLIEST_SLOT"],
         "explanation": "First available slot selected.",
     }
 )
@@ -104,7 +105,7 @@ class TestRecommend:
         assert "start_datetime" in body["recommended_slot"]
         assert "end_datetime" in body["recommended_slot"]
         assert isinstance(body["reason_codes"], list)
-        assert len(body["reason_codes"]) > 0
+        assert body["reason_codes"] == ["MEDIUM_PRIORITY", "EARLIEST_SLOT"]
         assert isinstance(body["explanation"], str)
         assert isinstance(body["candidate_slots"], list)
         assert len(body["candidate_slots"]) > 0
@@ -129,7 +130,7 @@ class TestRecommend:
         assert rec.recommended_end is not None
         reason_codes = json.loads(rec.reason_codes)
         assert isinstance(reason_codes, list)
-        assert len(reason_codes) > 0
+        assert reason_codes == ["MEDIUM_PRIORITY", "EARLIEST_SLOT"]
         # user_action must be null — no decision yet
         assert rec.user_action is None
         assert rec.final_start is None
