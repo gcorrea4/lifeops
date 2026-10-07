@@ -89,17 +89,26 @@ class WatsonxProvider(AbstractProvider):
                 model_id=settings.WATSONX_MODEL_ID,
                 api_client=client,
                 project_id=settings.WATSONX_PROJECT_ID,
-                params={"temperature": 0, "max_new_tokens": 512},
             )
-            response = model.generate_text(prompt=prompt)
-            if isinstance(response, str):
-                return response
+            response = model.chat(
+                messages=[{"role": "user", "content": prompt}],
+                params={
+                    "temperature": 0,
+                    "max_tokens": 512,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            # Extract transport content only; PlannerAgent validates the JSON.
             if isinstance(response, dict):
-                text = response.get("generated_text", "")
-                if isinstance(text, str):
-                    return text
+                choices = response.get("choices")
+                if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                    message = choices[0].get("message")
+                    if isinstance(message, dict):
+                        text = message.get("content")
+                        if isinstance(text, str):
+                            return text
             raise ProviderError(
-                f"Unexpected response type from generate_text: {type(response)}"
+                "Unexpected chat response: missing string message content"
             )
         except Exception as exc:
             raise ProviderError(f"watsonx completion failed: {exc}") from exc
