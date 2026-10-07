@@ -347,7 +347,7 @@ def test_suggest_empty_schedule():
     """No blocks and no slots → slots are suggested across the lookahead window."""
     task = _task(duration_minutes=60)
     result = suggest_slots(task, [], [], MONDAY, lookahead_days=2,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     assert len(result) > 0
     # All returned slots start on or after MONDAY
     for s in result:
@@ -362,7 +362,7 @@ def test_suggest_full_day_blocked():
     block = _once_block(d=MONDAY, start_h=8, end_h=22)
     task = _task(duration_minutes=60)
     result = suggest_slots(task, [block], [], MONDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     monday_slots = [s for s in result if s.date == MONDAY]
     assert monday_slots == []
 
@@ -373,7 +373,7 @@ def test_suggest_overnight_block_origin_day():
     block = _once_block(d=MONDAY, start_h=20, end_h=6, spans_next_day=True)
     task = _task(duration_minutes=60)
     result = suggest_slots(task, [block], [], MONDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     # No slot on Monday should start at or after 20:00
     for s in result:
         if s.date == MONDAY:
@@ -386,7 +386,7 @@ def test_suggest_overnight_block_next_day():
     block = _once_block(d=MONDAY, start_h=22, end_h=10, spans_next_day=True)
     task = _task(duration_minutes=60)
     result = suggest_slots(task, [block], [], TUESDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     # On Tuesday no slot should start before 10:00
     for s in result:
         if s.date == TUESDAY:
@@ -399,7 +399,7 @@ def test_suggest_overlapping_blocks():
     b2 = _once_block(d=MONDAY, start_h=10, end_h=12)
     task = _task(duration_minutes=60)
     result = suggest_slots(task, [b1, b2], [], MONDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     # No slot should overlap [09:00, 12:00)
     for s in result:
         if s.date == MONDAY:
@@ -413,7 +413,7 @@ def test_suggest_adjacent_blocks_merged():
     b2 = _once_block(d=MONDAY, start_h=10, end_h=11)
     task = _task(duration_minutes=60)
     result = suggest_slots(task, [b1, b2], [], MONDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     # No slot should start between 09:00 and 11:00 on Monday
     for s in result:
         if s.date == MONDAY:
@@ -425,7 +425,7 @@ def test_suggest_deadline_filters_slots_after_deadline():
     deadline = MONDAY
     task = _task(duration_minutes=60, deadline=deadline)
     result = suggest_slots(task, [], [], MONDAY, lookahead_days=7,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     for s in result:
         assert s.date <= deadline
 
@@ -437,15 +437,13 @@ def test_suggest_deadline_boundary_slot_fits():
     (21:00–22:00).  That slot ends exactly at WORK_END and must be returned even
     though the deadline is on the same day.
     """
-    from datetime import date as _date
-    today = _date.today()
-    deadline = today + timedelta(days=1)  # always in the future
+    deadline = TUESDAY
 
     # Block 08:00–21:00 — leaves only 21:00–22:00 free
     block = _once_block(d=deadline, start_h=8, end_h=21)
     task = _task(duration_minutes=60, deadline=deadline)
     result = suggest_slots(task, [block], [], deadline, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     # The only candidate is 21:00–22:00; end_datetime == WORK_END must be included
     deadline_dt_end = datetime.combine(deadline, WORK_END)
     ends_at_work_end = [s for s in result
@@ -459,7 +457,7 @@ def test_suggest_deadline_boundary_slot_too_long():
     # 90-minute task; if slot starts at 21:00 it ends at 22:30 — must be rejected
     task = _task(duration_minutes=90, deadline=deadline)
     result = suggest_slots(task, [], [], MONDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     for s in result:
         assert s.end_datetime <= _dt(MONDAY, 22)
 
@@ -470,7 +468,7 @@ def test_suggest_task_fits_exactly():
     block = _once_block(d=MONDAY, start_h=8, end_h=20)
     task = _task(duration_minutes=120)
     result = suggest_slots(task, [block], [], MONDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     monday_slots = [s for s in result if s.date == MONDAY]
     assert len(monday_slots) == 1
     assert monday_slots[0].start_datetime == _dt(MONDAY, 20)
@@ -481,7 +479,7 @@ def test_suggest_max_10_suggestions():
     """Never returns more than 10 suggestions."""
     task = _task(duration_minutes=30)  # many slots fit in 7 days
     result = suggest_slots(task, [], [], MONDAY, lookahead_days=7,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     assert len(result) <= 10
 
 
@@ -490,9 +488,54 @@ def test_suggest_existing_slot_blocks_time():
     slot = _slot(_dt(MONDAY, 9), _dt(MONDAY, 11))
     task = _task(duration_minutes=60)
     result = suggest_slots(task, [], [slot], MONDAY, lookahead_days=1,
-                           work_start=WORK_START, work_end=WORK_END)
+                           work_start=WORK_START, work_end=WORK_END, now=_dt(MONDAY, 7))
     for s in result:
         if s.date == MONDAY:
             # No suggested slot should overlap [09:00, 11:00)
             assert not (s.start_datetime < _dt(MONDAY, 11) and
                         s.end_datetime > _dt(MONDAY, 9))
+
+
+@pytest.mark.parametrize("hour,minute,first_day,first_hour", [
+    (7, 0, MONDAY, 8),
+    (15, 30, MONDAY, 16),
+    (15, 0, MONDAY, 16),
+    (21, 0, TUESDAY, 8),
+    (22, 0, TUESDAY, 8),
+    (23, 0, TUESDAY, 8),
+])
+def test_suggest_explicit_cutoff(hour, minute, first_day, first_hour):
+    now = _dt(MONDAY, hour, minute)
+    result = suggest_slots(_task(60), [], [], MONDAY, 2,
+                           WORK_START, WORK_END, now=now)
+    assert result[0].start_datetime == _dt(first_day, first_hour)
+    assert all(s.start_datetime > now for s in result)
+    assert all(s.end_datetime - s.start_datetime == timedelta(minutes=60)
+               for s in result)
+    assert len(result) == 10
+    assert [s.start_datetime for s in result] == sorted(s.start_datetime for s in result)
+
+
+def test_suggest_future_day_unchanged():
+    early = suggest_slots(_task(60), [], [], TUESDAY, 1,
+                          WORK_START, WORK_END, now=_dt(MONDAY, 7))
+    late = suggest_slots(_task(60), [], [], TUESDAY, 1,
+                         WORK_START, WORK_END, now=_dt(MONDAY, 23))
+    assert early == late
+    assert early[0].start_datetime == _dt(TUESDAY, 8)
+
+
+def test_suggest_deadline_today_no_remaining_fit():
+    assert suggest_slots(_task(60, deadline=MONDAY), [], [], MONDAY, 7,
+                         WORK_START, WORK_END, now=_dt(MONDAY, 21, 30)) == []
+
+
+def test_suggest_cutoff_keeps_conflicts_and_overnight_tail():
+    tail = _once_block(MONDAY, 22, 10, spans_next_day=True)
+    slot = _slot(_dt(TUESDAY, 11), _dt(TUESDAY, 13))
+    result = suggest_slots(_task(60), [tail], [slot], TUESDAY, 1,
+                           WORK_START, WORK_END, now=_dt(TUESDAY, 9, 30))
+    assert result[0].start_datetime == _dt(TUESDAY, 10)
+    assert all(not (s.start_datetime < _dt(TUESDAY, 13)
+                    and s.end_datetime > _dt(TUESDAY, 11)) for s in result)
+    assert all(s.end_datetime <= _dt(TUESDAY, 22) for s in result)

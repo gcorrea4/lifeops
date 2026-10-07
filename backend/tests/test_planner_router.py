@@ -12,6 +12,9 @@ import json
 from datetime import date, datetime
 
 import pytest
+from app.core import clock
+
+pytestmark = pytest.mark.usefixtures("fixed_now")
 
 from app.ai.provider import MockProvider, get_provider
 from app.main import app
@@ -53,7 +56,7 @@ def _make_task(
         priority=Priority.medium,
         status=status,
         deadline=deadline,
-        created_at=datetime.utcnow(),
+        created_at=clock.now(),
     )
     db.add(task)
     db.commit()
@@ -191,7 +194,7 @@ class TestRecommend:
     def test_recommend_no_slots_available(self, client, db_session, mock_provider):
         """A task with a past deadline produces no candidates → 422."""
         from datetime import timedelta
-        past_deadline = date.today() - timedelta(days=1)
+        past_deadline = clock.now().date() - timedelta(days=1)
         # Create with deadline in the past — bypass Pydantic validator by writing directly
         task = Task(
             user_id=USER_ID,
@@ -200,7 +203,7 @@ class TestRecommend:
             priority=Priority.medium,
             status=TaskStatus.pending,
             deadline=past_deadline,
-            created_at=datetime.utcnow(),
+            created_at=clock.now(),
         )
         db_session.add(task)
         db_session.commit()
@@ -524,7 +527,7 @@ class TestFromDateValidation:
         """from_date in the past must return 422."""
         from datetime import timedelta
         task = _make_task(db_session)
-        past_date = (date.today() - timedelta(days=1)).isoformat()
+        past_date = (clock.now().date() - timedelta(days=1)).isoformat()
 
         response = client.post(
             "/api/v1/planner/recommend",
@@ -536,10 +539,52 @@ class TestFromDateValidation:
     def test_recommend_from_date_today_accepted(self, client, db_session, mock_provider):
         """from_date == today must be accepted (boundary: today is valid)."""
         task = _make_task(db_session)
-        today = date.today().isoformat()
+        today = clock.now().date().isoformat()
 
         response = client.post(
             "/api/v1/planner/recommend",
             json={"task_id": task.id, "from_date": today},
         )
         assert response.status_code == 201
+
+
+@pytest.mark.parametrize("fixed_response", [_VALID_MOCK_RESPONSE, _INVALID_MOCK_RESPONSE])
+def test_planner_cutoff_reaches_agent(client, db_session, monkeypatch, mock_provider,
+                                     fixed_response):
+    import app.routers.planner as router_module
+    from unittest.mock import Mock
+    captured = datetime(2026, 10, 7, 15, 30)
+    task = _make_task(db_session)
+    clock_spy = Mock(return_value=captured)
+    monkeypatch.setattr(clock, "now", clock_spy)
+    service_spy = Mock(wraps=router_module.suggest_slots)
+    monkeypatch.setattr(router_module, "suggest_slots", service_spy)
+    recommend_spy = Mock(wraps=router_module.PlannerAgent.recommend)
+    monkeypatch.setattr(router_module.PlannerAgent, "recommend",
+                        lambda self, inp: recommend_spy(self, inp))
+    monkeypatch.setattr(mock_provider, "_response", fixed_response)
+    response = client.post("/api/v1/planner/recommend", json={"task_id": task.id})
+    assert response.status_code == 201
+    clock_spy.assert_called_once_with()
+    assert service_spy.call_args.kwargs["now"] is captured
+    assert service_spy.call_args.kwargs["from_date"] == captured.date()
+    agent_input = recommend_spy.call_args.args[1]
+    assert all(s.start_datetime > captured for s in agent_input.candidate_slots)
+    assert datetime.fromisoformat(response.json()["recommended_slot"]["start_datetime"]) > captured
+    assert response.json()["fallback_used"] == (fixed_response == _INVALID_MOCK_RESPONSE)
+
+
+def test_planner_no_remaining_candidates_no_provider_or_audit(
+        client, db_session, monkeypatch, mock_provider):
+    from unittest.mock import Mock
+    captured = datetime(2026, 10, 7, 21, 30)
+    task = _make_task(db_session, duration_minutes=60, deadline=captured.date())
+    monkeypatch.setattr(clock, "now", lambda: captured)
+    complete_spy = Mock(wraps=mock_provider.complete)
+    monkeypatch.setattr(mock_provider, "complete", complete_spy)
+    response = client.post("/api/v1/planner/recommend", json={"task_id": task.id})
+    assert response.status_code == 422
+    complete_spy.assert_not_called()
+    assert db_session.query(AIRecommendation).count() == 0
+    db_session.refresh(task)
+    assert task.status == TaskStatus.pending

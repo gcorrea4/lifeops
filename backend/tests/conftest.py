@@ -14,6 +14,8 @@ Database strategy:
 """
 
 import pytest
+from datetime import datetime
+from app.core import clock
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
@@ -86,6 +88,13 @@ def _truncate_all(db):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def fixed_now(monkeypatch):
+    """Scheduling tests use one fixed naive local time, independent of the host."""
+    value = datetime(2026, 10, 7, 7, 0)
+    monkeypatch.setattr(clock, "now", lambda: value)
+    return value
 
 @pytest.fixture()
 def db_session():

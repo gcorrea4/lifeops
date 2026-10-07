@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, field_validator
 
+from app.core import clock
+
 
 class SlotSuggestion(BaseModel):
     """A candidate free slot returned by GET /engine/suggest.
@@ -30,7 +32,9 @@ class BookRequest(BaseModel):
     def start_must_be_in_the_future(cls, v: datetime) -> datetime:
         # Normalise to an aware datetime for comparison when a tz-aware value is passed.
         if isinstance(v, datetime):
-            now = datetime.now(tz=timezone.utc) if v.tzinfo is not None else datetime.now()
+            now = clock.now()
+            if v.tzinfo is not None:
+                now = now.astimezone(timezone.utc)
             if v <= now:
                 raise ValueError("start_datetime must be in the future")
         return v

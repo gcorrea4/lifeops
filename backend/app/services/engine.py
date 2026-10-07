@@ -224,6 +224,7 @@ def suggest_slots(
     lookahead_days: int,
     work_start: time,
     work_end: time,
+    now: datetime,
 ) -> list["SlotSuggestion"]:
     """Return at most 10 candidate SlotSuggestion objects, ordered by start_datetime.
 
@@ -241,6 +242,8 @@ def suggest_slots(
         Number of calendar days to inspect starting from ``from_date``.
     work_start / work_end:
         Daily working window boundaries (time objects).
+    now:
+        Captured naive local datetime; candidates must start strictly after it.
     """
     # Import here to avoid circular imports — engine.py must stay import-free
     # from the app.schemas package at module load time so it can be tested
@@ -297,6 +300,10 @@ def suggest_slots(
                     break
 
                 slot_end = slot_start + duration
+
+                if slot_start <= now:
+                    slot_start = slot_end
+                    continue
 
                 # Enforce deadline ceiling (inclusive)
                 if deadline_ceiling is not None and slot_end > deadline_ceiling:

@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.settings import settings
 from app.database import get_db
 from app.models.fixed_block import FixedBlock
@@ -57,6 +58,7 @@ def suggest(
     db: Session = Depends(get_db),
 ) -> list[SlotSuggestion]:
     """Return up to 10 candidate slots for a pending task."""
+    now = clock.now()
 
     # 1. Load task
     task = _get_task_or_404(task_id, db)
@@ -66,8 +68,8 @@ def suggest(
         raise HTTPException(status_code=409, detail="task is not pending")
 
     # 3. Resolve from_date — default today, reject past
-    resolved_from = from_date if from_date is not None else date.today()
-    if resolved_from < date.today():
+    resolved_from = from_date if from_date is not None else now.date()
+    if resolved_from < now.date():
         raise HTTPException(
             status_code=422, detail="from_date cannot be in the past"
         )
@@ -100,6 +102,7 @@ def suggest(
         lookahead_days=LOOKAHEAD_DAYS,
         work_start=settings.WORK_START,
         work_end=settings.WORK_END,
+        now=now,
     )
 
 
@@ -111,6 +114,7 @@ def suggest(
 @router.post("/book", response_model=ScheduledSlotRead, status_code=201)
 def book(payload: BookRequest, db: Session = Depends(get_db)) -> ScheduledSlot:
     """Validate and confirm a booking. Revalidates availability at booking time."""
+    now = clock.now()
 
     # 1. Load task
     task = _get_task_or_404(payload.task_id, db)
@@ -127,12 +131,19 @@ def book(payload: BookRequest, db: Session = Depends(get_db)) -> ScheduledSlot:
 
     # Guard: start_datetime must be in the future (Pydantic validator only fires
     # for Python datetime objects, not for JSON strings; enforce here for HTTP requests)
-    if start_dt <= datetime.now():
+    if start_dt <= now:
         raise HTTPException(
             status_code=422, detail="start_datetime must be in the future"
         )
 
     end_dt = start_dt + timedelta(minutes=task.duration_minutes)
+
+    window_start = datetime.combine(start_dt.date(), settings.WORK_START)
+    window_end = datetime.combine(start_dt.date(), settings.WORK_END)
+    if not window_start <= start_dt < end_dt <= window_end:
+        raise HTTPException(
+            status_code=422, detail="slot must stay within the daily work window"
+        )
 
     # 4. Validate deadline (inclusive — end_dt <= combine(deadline, WORK_END))
     if task.deadline is not None:

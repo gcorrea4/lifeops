@@ -7,6 +7,9 @@ No real MySQL connection is needed.
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from app.core import clock
+
+pytestmark = pytest.mark.usefixtures("fixed_now")
 
 from app.models.enums import Priority, RecurrenceType, TaskStatus
 from app.models.fixed_block import FixedBlock
@@ -34,7 +37,7 @@ def _make_task(
         priority=Priority.medium,
         status=status,
         deadline=deadline,
-        created_at=datetime.utcnow(),
+        created_at=clock.now(),
     )
     db.add(task)
     db.commit()
@@ -48,7 +51,7 @@ def _make_slot(db, task: Task, start: datetime, end: datetime) -> ScheduledSlot:
         user_id=USER_ID,
         start_datetime=start,
         end_datetime=end,
-        created_at=datetime.utcnow(),
+        created_at=clock.now(),
     )
     db.add(slot)
     db.commit()
@@ -76,7 +79,7 @@ def _make_weekly_block(
         start_time=time(start_h, start_m),
         end_time=time(end_h, end_m),
         spans_next_day=spans_next_day,
-        created_at=datetime.utcnow(),
+        created_at=clock.now(),
     )
     db.add(block)
     db.commit()
@@ -104,7 +107,7 @@ def _make_once_block(
         start_time=time(start_h, start_m),
         end_time=time(end_h, end_m),
         spans_next_day=spans_next_day,
-        created_at=datetime.utcnow(),
+        created_at=clock.now(),
     )
     db.add(block)
     db.commit()
@@ -114,11 +117,11 @@ def _make_once_block(
 
 def _future_dt(hours_from_now: int = 2) -> datetime:
     """Return a naive datetime in the future (used for book requests)."""
-    return datetime.utcnow() + timedelta(hours=hours_from_now)
+    return clock.now() + timedelta(hours=hours_from_now)
 
 
 def _future_date(days_from_now: int = 1) -> date:
-    return date.today() + timedelta(days=days_from_now)
+    return clock.now().date() + timedelta(days=days_from_now)
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +161,7 @@ class TestSuggest:
     def test_suggest_full_day_blocked_no_results(self, client, db_session):
         task = _make_task(db_session, duration_minutes=60)
         # Block today 08:00–22:00 — covers entire working window
-        today = date.today()
+        today = clock.now().date()
         _make_once_block(db_session, d=today, start_h=8, end_h=22)
         from_date_str = today.isoformat()
         response = client.get(
@@ -185,7 +188,7 @@ class TestSuggest:
 
     def test_suggest_from_date_in_past(self, client, db_session):
         task = _make_task(db_session, duration_minutes=60)
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        yesterday = (clock.now().date() - timedelta(days=1)).isoformat()
         response = client.get(
             f"/api/v1/engine/suggest?task_id={task.id}&from_date={yesterday}"
         )
@@ -205,7 +208,7 @@ class TestSuggest:
     def test_suggest_overnight_block_respected(self, client, db_session):
         """Overnight block tail reduces available window on the next day."""
         task = _make_task(db_session, duration_minutes=60)
-        today = date.today()
+        today = clock.now().date()
         tomorrow = today + timedelta(days=1)
         # Block today 22:00 → tomorrow 10:00
         _make_once_block(
@@ -228,7 +231,7 @@ class TestSuggest:
         other_task = _make_task(db_session, title="Other task", duration_minutes=60,
                                 status=TaskStatus.scheduled)
         # Create a slot for other_task that occupies today 10:00–11:00
-        today = date.today()
+        today = clock.now().date()
         existing_start = datetime.combine(today, __import__('datetime').time(10, 0))
         existing_end = existing_start + timedelta(hours=1)
         _make_slot(db_session, other_task, start=existing_start, end=existing_end)
@@ -275,21 +278,19 @@ class TestBook:
 
     def test_book_past_datetime_rejected(self, client, db_session):
         task = _make_task(db_session)
-        # Use datetime.now() (local, naive) to match the Pydantic validator comparison
-        past_dt = (datetime.now() - timedelta(hours=1)).isoformat()
+        # Use clock.now() (local, naive) to match the Pydantic validator comparison
+        past_dt = (clock.now() - timedelta(hours=1)).isoformat()
         payload = {"task_id": task.id, "start_datetime": past_dt}
         response = client.post("/api/v1/engine/book", json=payload)
         assert response.status_code == 422  # Pydantic validator
 
     def test_book_exceeds_deadline(self, client, db_session):
-        # Deadline is today; 90-minute task starting at 21:30 ends at 23:00 (> 22:00)
-        deadline = date.today()
+        # Within the daily window, but on the day after the deadline.
+        deadline = clock.now().date()
         task = _make_task(db_session, duration_minutes=90, deadline=deadline)
-        # Start at 21:30 today → end 23:00 → exceeds WORK_END (22:00)
-        start = datetime.combine(deadline, __import__('datetime').time(21, 30))
+        # Tomorrow 10:00–11:30 fits the work window but misses the deadline.
+        start = datetime.combine(deadline + timedelta(days=1), __import__('datetime').time(10, 0))
         # Must be in the future for Pydantic to accept it
-        if start <= datetime.utcnow():
-            pytest.skip("Cannot test deadline booking with today as deadline when 21:30 has passed")
         payload = {"task_id": task.id, "start_datetime": start.isoformat()}
         response = client.post("/api/v1/engine/book", json=payload)
         assert response.status_code == 422
@@ -376,3 +377,101 @@ class TestBook:
         r2 = client.post("/api/v1/engine/book", json=payload2)
         assert r2.status_code == 409
         assert "not pending" in r2.json()["detail"]
+
+
+@pytest.mark.parametrize("hour,minute,duration,later_deadline", [
+    (7, 59, 60, False),
+    (21, 30, 60, False),
+    (23, 30, 120, False),
+    (22, 0, 60, True),
+    (8, 0, 1500, False),
+])
+def test_book_invalid_work_window(client, db_session, fixed_now, hour, minute,
+                                  duration, later_deadline):
+    from datetime import time
+    day = fixed_now.date() + timedelta(days=1)
+    deadline = day + timedelta(days=2) if later_deadline else None
+    task = _make_task(db_session, duration_minutes=duration, deadline=deadline)
+    response = client.post("/api/v1/engine/book", json={
+        "task_id": task.id,
+        "start_datetime": datetime.combine(day, time(hour, minute)).isoformat(),
+    })
+    assert response.status_code == 422
+    assert "work window" in response.json()["detail"]
+    db_session.refresh(task)
+    assert task.status == TaskStatus.pending
+    assert db_session.query(ScheduledSlot).filter_by(task_id=task.id).count() == 0
+
+
+@pytest.mark.parametrize("hour,duration", [(8, 60), (21, 60), (8, 840)])
+def test_book_work_window_boundaries(client, db_session, fixed_now, hour, duration):
+    from datetime import time
+    day = fixed_now.date() + timedelta(days=1)
+    task = _make_task(db_session, duration_minutes=duration, deadline=day)
+    response = client.post("/api/v1/engine/book", json={
+        "task_id": task.id,
+        "start_datetime": datetime.combine(day, time(hour)).isoformat(),
+    })
+    assert response.status_code == 201
+    db_session.refresh(task)
+    assert task.status == TaskStatus.scheduled
+    assert db_session.query(ScheduledSlot).filter_by(task_id=task.id).count() == 1
+
+
+@pytest.mark.parametrize("hour,duration,expected", [
+    (9, 60, 422), (10, 60, 201), (17, 60, 201), (17, 90, 422),
+])
+def test_book_custom_work_window(client, db_session, fixed_now, monkeypatch,
+                                 hour, duration, expected):
+    from datetime import time
+    from app.core.settings import settings
+    monkeypatch.setattr(settings, "WORK_START", time(10))
+    monkeypatch.setattr(settings, "WORK_END", time(18))
+    task = _make_task(db_session, duration_minutes=duration)
+    day = fixed_now.date() + timedelta(days=1)
+    response = client.post("/api/v1/engine/book", json={
+        "task_id": task.id,
+        "start_datetime": datetime.combine(day, time(hour)).isoformat(),
+    })
+    assert response.status_code == expected
+    db_session.refresh(task)
+    assert task.status == (TaskStatus.scheduled if expected == 201 else TaskStatus.pending)
+    assert db_session.query(ScheduledSlot).filter_by(task_id=task.id).count() == (
+        1 if expected == 201 else 0
+    )
+
+
+def test_suggest_captures_clock_once(client, db_session, monkeypatch):
+    import app.routers.engine as router_module
+    from unittest.mock import Mock
+    captured = datetime(2026, 10, 7, 15, 30)
+    clock_spy = Mock(return_value=captured)
+    monkeypatch.setattr(clock, "now", clock_spy)
+    real_suggest = router_module.suggest_slots
+    service_spy = Mock(wraps=real_suggest)
+    monkeypatch.setattr(router_module, "suggest_slots", service_spy)
+    task = _make_task(db_session)
+    clock_spy.reset_mock()
+    response = client.get(f"/api/v1/engine/suggest?task_id={task.id}")
+    assert response.status_code == 200
+    clock_spy.assert_called_once_with()
+    assert service_spy.call_args.kwargs["now"] is captured
+    assert service_spy.call_args.kwargs["from_date"] == captured.date()
+    assert all(datetime.fromisoformat(s["start_datetime"]) > captured
+               for s in response.json())
+
+
+def test_book_equal_now_rejected_and_clock_read_once(client, db_session, monkeypatch):
+    from unittest.mock import Mock
+    captured = datetime(2026, 10, 7, 10)
+    task = _make_task(db_session)
+    spy = Mock(return_value=captured)
+    monkeypatch.setattr(clock, "now", spy)
+    response = client.post("/api/v1/engine/book", json={
+        "task_id": task.id, "start_datetime": captured.isoformat(),
+    })
+    assert response.status_code == 422
+    spy.assert_called_once_with()
+    db_session.refresh(task)
+    assert task.status == TaskStatus.pending
+    assert db_session.query(ScheduledSlot).count() == 0

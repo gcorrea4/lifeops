@@ -228,20 +228,20 @@ def test_task_read_from_attributes():
 # ---------------------------------------------------------------------------
 
 
-def test_book_request_future_naive():
-    future = datetime.now() + timedelta(hours=2)
+def test_book_request_future_naive(fixed_now):
+    future = fixed_now + timedelta(hours=2)
     req = BookRequest(task_id=1, start_datetime=future)
     assert req.task_id == 1
 
 
-def test_book_request_future_aware():
-    future = datetime.now(tz=timezone.utc) + timedelta(hours=2)
+def test_book_request_future_aware(fixed_now):
+    future = fixed_now.astimezone(timezone.utc) + timedelta(hours=2)
     req = BookRequest(task_id=1, start_datetime=future)
     assert req.task_id == 1
 
 
-def test_book_request_past_raises():
-    past = datetime.now() - timedelta(hours=1)
+def test_book_request_past_raises(fixed_now):
+    past = fixed_now - timedelta(hours=1)
     with pytest.raises(ValidationError) as exc_info:
         BookRequest(task_id=1, start_datetime=past)
     assert "start_datetime" in str(exc_info.value)

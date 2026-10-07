@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.agent import PlannerAgent
 from app.ai.provider import AbstractProvider, get_provider
+from app.core import clock
 from app.core.settings import settings
 from app.database import get_db
 from app.models.fixed_block import FixedBlock
@@ -92,6 +93,7 @@ def recommend(
     Task.status is never mutated here.
     Booking never happens here.
     """
+    now = clock.now()
     # 1. Load task
     task = _get_task_or_404(payload.task_id, db)
 
@@ -100,8 +102,8 @@ def recommend(
         raise HTTPException(status_code=409, detail="task is not pending")
 
     # 3. Resolve from_date — default today, reject past (same rule as GET /engine/suggest)
-    resolved_from: date = payload.from_date if payload.from_date is not None else date.today()
-    if resolved_from < date.today():
+    resolved_from: date = payload.from_date if payload.from_date is not None else now.date()
+    if resolved_from < now.date():
         raise HTTPException(status_code=422, detail="from_date cannot be in the past")
 
     # 4. Load all FixedBlocks for user
@@ -132,6 +134,7 @@ def recommend(
         lookahead_days=LOOKAHEAD_DAYS,
         work_start=settings.WORK_START,
         work_end=settings.WORK_END,
+        now=now,
     )
 
     # 7. If no candidates, the AI layer cannot proceed
