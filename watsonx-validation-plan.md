@@ -79,7 +79,7 @@ This demonstrates safe fallback and action separation. It does not claim that a 
 
 The historical watsonx-e2e-validation-report.md retains detailed pre-chat requests/responses. Its text-generation warning and malformed-output observations describe that earlier phase.
 
-Booking currently lacks an explicit daily work-window boundary check beyond its deadline ceiling; generated candidates are constrained by the work window. The successful valid-candidate booking must not be presented as proof that every arbitrary booking input is guarded.
+At the time of this real validation, booking lacked an explicit daily work-window guard. A subsequent approved deterministic fix now enforces the full interval within the configured start-date window and excludes nonfuture suggestions. Its isolated suite passed with 186 passed, 1 skipped, 0 failed; no real watsonx calls were rerun for that fix.
 
 ## Automated and Live Test Evidence
 
@@ -97,7 +97,7 @@ pytest installation was container-only. The isolated suite used SQLite dependenc
 - Separate credential-gated real smoke: **1 passed**, 3 warnings.
 - Eight mocked chat transport cases cover parameters, unchanged text delivery to PlannerAgent, response-shape errors and upstream errors.
 - Smoke asserts a nonempty string, not PlannerAgent schema validity, and does not print raw output.
-- The pre-existing time-dependent booking test can skip at other execution times.
+- The pre-existing time-dependent booking test was subsequently rewritten with a fixed shared clock; its time-of-day skip is removed.
 
 Warnings include the nullable date annotation, utcnow test helpers, Starlette/httpx and third-party model licensing. The text-generation API warning is gone.
 
@@ -107,4 +107,4 @@ Migration files: backend/app/ai/provider.py, backend/tests/test_watsonx_chat.py 
 
 No raw model output was persisted. No secrets were exposed or changed. No new agents, routes, tables or frontend features were introduced.
 
-Future scoped priorities: semantic reason-code consistency, larger reliability samples, supported Granite validation, deterministic booking boundary review and clock-dependent test cleanup. These are not part of the completed migration.
+Future scoped priorities: semantic reason-code consistency, larger reliability samples and supported Granite validation. The deterministic booking boundary and clock-dependent scheduling-test fixes were subsequently completed under separate approval; they did not modify AI behavior or form part of the chat migration.
