@@ -27,11 +27,14 @@ Deterministic rules have priority. AI must never override hard scheduling constr
 | ST-8 cleanup | Complete | Candidate-ID contract, injected-provider audit metadata, planner from_date validation and regression coverage |
 | ST-9 | Complete | AI test coverage and real watsonx validation; credential-gated smoke test and chat migration validated |
 | Deterministic time/window hardening | Complete | Shared clock, future-only suggestions, daily booking window and deterministic tests |
+| Deterministic reason-code governance | Complete | Two-field model output; backend-derived reason codes; candidate and fallback guards preserved |
 | Frontend MVP | Complete | Tasks, commitments, planner decisions and explicit booking in one page; build/lint and real manual flow validated |
 
 Historical plans use differing stage numbering in places. Their unchecked boxes and proposed contracts are not the current specification.
 
-Latest isolated automated suite after deterministic gap fixes: **186 passed, 1 skipped, 0 failed** (2 existing warnings). Real credential-gated smoke test run separately: **1 passed**. These are recorded validation results, not a guarantee of a fresh run.
+Latest isolated automated suite after deterministic reason-code governance: **216 passed, 1 skipped, 0 failed** (2 existing warnings). The only skip is the credential-gated watsonx smoke with credentials disabled. This run used the actual local source mounted read-only, not a stale container copy. The separate real smoke previously passed; it was not rerun for this change.
+
+The current MVP is **feature-frozen**. Completed architecture decisions remain closed; the priorities below concern presentation, deployment and usage.
 
 The frontend MVP now integrates the validated backend flow in one page. No authentication or deployed production environment exists. Frontend build and lint passed without warnings; manual real recommendation/decision/booking validation passed. This is an MVP, not a production design.
 
@@ -61,6 +64,7 @@ Relevant backend directories under `backend/app/`:
 - The deterministic engine owns scheduling validity and remains independent from AI.
 - AI receives only deterministic candidates; it never creates availability or invents datetimes.
 - AI never creates or modifies scheduling boundaries. The model selects `recommended_candidate_id` only. PlannerAgent resolves datetimes from the original input candidate list.
+- The model returns only recommended_candidate_id and explanation. Backend code derives reason_codes; model-supplied codes have no authority.
 - Recommend → decision → engine/book are three separate actions.
 - `/planner/decision` never creates a ScheduledSlot or mutates Task.status.
 - APPROVED ignores chosen_start/chosen_end and uses the persisted recommended slot.
@@ -110,7 +114,7 @@ Keep these interaction rules:
 - A page reload discards the local planner flow. There is no recommendation-recovery endpoint or browser persistence.
 - Do not put watsonx credentials in browser configuration or frontend bundles.
 
-Validated frontend flow: Task 8 → recommendation 3 (fallback_used=false) → MODIFIED to an original candidate → pending with zero slots → explicit booking → ScheduledSlot 2 → scheduled. Selected slot: 2026-10-07 14:00–14:30, preserved as backend naive datetime strings. REJECTED and once overnight creation were also confirmed.
+Historical validated frontend flow, before final reason-code governance: Task 8 → recommendation 3 (fallback_used=false) → MODIFIED to an original candidate → pending with zero slots → explicit booking → ScheduledSlot 2 → scheduled. Selected slot: 2026-10-07 14:00–14:30, preserved as backend naive datetime strings. REJECTED and once overnight creation were also confirmed.
 
 Validation uses npm run build, npm run lint and manual end-to-end checks. Both commands passed with no warnings. There is no automated frontend interaction test runner; adding one requires separate scope.
 
@@ -186,29 +190,27 @@ The prompt contains task title, duration, priority, deadline and indexed determi
 ```json
 {
   "recommended_candidate_id": 0,
-  "reason_codes": ["HIGH_PRIORITY", "EARLIEST_SLOT"],
   "explanation": "This valid candidate offers an early start for a high-priority task."
 }
 ```
 
-This example documents the contract; it does not mean the production prompt was rewritten during chat migration.
+PlannerAgent owns fence removal, json.loads, Pydantic structural validation, strict integer candidate-ID validation, bounds checks, deterministic candidate lookup and reason-code derivation. Stored explanations are limited to 200 characters. Extra model fields are ignored; they cannot override derived reason codes.
 
-PlannerAgent owns fence removal, json.loads, Pydantic validation, candidate bounds, reason-code validation and candidate lookup. It limits the stored explanation to 200 characters.
+| Code | Deterministic rule |
+|---|---|
+| HIGH_PRIORITY | task.priority == "high" |
+| MEDIUM_PRIORITY | task.priority == "medium" |
+| LOW_PRIORITY | task.priority == "low" |
+| EARLIEST_SLOT | selected candidate_id == 0 |
+| ONLY_SLOT_AVAILABLE | len(candidate_slots) == 1 |
+| DEADLINE_CLOSE | deadline exists and (deadline - selected_candidate.date).days <= 1 |
+| PROVIDER_FALLBACK | System-only fallback path |
 
-Allowed reason codes:
-- DEADLINE_CLOSE
-- HIGH_PRIORITY
-- MEDIUM_PRIORITY
-- EARLIEST_SLOT
-- MOST_BUFFER_BEFORE_DEADLINE
-- ONLY_SLOT_AVAILABLE
-- PROVIDER_FALLBACK — reserved for system fallback; model output using it is rejected.
+Multiple factual codes can apply together. DEADLINE_CLOSE uses calendar-date subtraction against the selected candidate, not current time or a rolling 48-hour window. MOST_BUFFER_BEFORE_DEADLINE has been removed from the final vocabulary. Historical audit rows are not rewritten.
 
-AI may rank or compare valid options and explain priority/deadline considerations. It must not bypass commitments, invent availability, mutate Task.status or book. Feedback is recorded for audit; no learned-feedback pipeline is implemented.
+Fallback is limited to ProviderError, malformed JSON, structurally invalid output (including missing fields), or invalid candidate_id (including negative/out-of-range IDs). It selects candidate 0, sets fallback_used=true, and returns only PROVIDER_FALLBACK plus the existing concise default explanation. Extra model reason_codes do not trigger fallback. Empty candidates yield route HTTP 422 before a provider call or audit insert.
 
-Malformed JSON, invalid schema/candidate/reason codes or ProviderError selects the first deterministic candidate, sets fallback_used=true and uses PROVIDER_FALLBACK with a concise default explanation. A fallback still has a valid recommended slot. Empty candidates cannot produce a recommendation: the route returns 422.
-
-Reason-code membership is validated, semantic truth is not. A valid structured response can still use EARLIEST_SLOT inaccurately for a later candidate.
+AI may compare valid options and supply a concise explanation; it never creates availability, mutates Task.status or books. Reason-code semantics are now deterministic, while free-text explanation accuracy is not guaranteed. No learned-feedback pipeline exists.
 
 ## HTTP and Human Decision Rules
 
@@ -239,7 +241,7 @@ AbstractProvider.complete(prompt) -> str remains the interface. provider_name an
 
 WatsonxProvider imports the SDK lazily and obtains credentials/configuration from environment-backed settings. Current transport:
 - ModelInference.chat();
-- one user message containing the unchanged PlannerAgent prompt;
+- one user message containing the current PlannerAgent prompt;
 - temperature=0, max_tokens=512;
 - response_format={"type":"json_object"};
 - returns choices[0].message.content as a string only.
@@ -252,7 +254,7 @@ Real IBM Cloud authentication, watsonx project/Runtime and smoke test are valida
 
 The available Lite/Sydney runtime did not support the planned Granite model. A non-IBM model is currently used through IBM watsonx. Future Granite validation may require a supported region/runtime/deployment; do not silently change provider or force broad workarounds.
 
-The deprecated text-generation transport was replaced by chat with accepted JSON response format. The /ml/v1/text/generation deprecation warning disappeared. Controlled reliability: before 2/5 valid, 3/5 malformed-JSON fallbacks; after 5/5 valid, 0/5 fallbacks. This small sample does not establish production reliability.
+The deprecated text-generation transport was replaced by chat with accepted JSON response format. The /ml/v1/text/generation deprecation warning disappeared. Controlled reliability: before 2/5 valid, 3/5 malformed-JSON fallbacks; after 5/5 valid, 0/5 fallbacks. This historical comparison preceded deterministic reason-code governance and does not establish production reliability. No new live five-call evaluation was run for the final two-field contract.
 
 The real persisted end-to-end flow was validated using the earlier fallback recommendation: approval left Task pending and no slot existed until explicit engine/book created it and set scheduled. The later five-call chat comparison did not create bookings or audit rows. A subsequent frontend-backed real chat flow did persist recommendation 3 without fallback, record MODIFIED, and create ScheduledSlot 2 only after explicit booking.
 
@@ -266,14 +268,11 @@ Automated tests must not connect to development MySQL:
 
 Mock external AI calls. Unit/integration tests require no real credentials. Only the explicitly credential-gated watsonx smoke test may make a live call; it asserts nonempty string connectivity, not PlannerAgent JSON correctness, and does not print raw output.
 
-Preserve coverage for parsing/schema/invalid codes/candidate bounds/fallback, injected-provider audit metadata, from_date, human decision semantics and deterministic booking conflicts. Chat transport tests verify parameters, text passthrough, malformed response shapes and upstream errors. Do not reduce coverage or make tests depend on model-specific prose.
+Preserve coverage for parsing/schema/strict candidate bounds/fallback and deterministic reason-code derivation, injected-provider audit metadata, from_date, human decision semantics and deterministic booking conflicts. Chat transport tests verify parameters, text passthrough, malformed response shapes and upstream errors. Do not reduce coverage or make tests depend on model-specific prose.
 
-Recorded validation commands, executed in the API container:
-```text
-docker compose exec -T -e WATSONX_API_KEY= api python -m pytest tests -q -p no:cacheprovider
-docker compose exec -T api python -m pytest tests/test_watsonx_provider.py -v -p no:cacheprovider
-```
-The latest first-command run deliberately disabled live credentials: 186 passed, 1 skipped, 0 failed, with 2 warnings. Its only skip was the smoke test. The separate live smoke passed during prior watsonx validation; it was not rerun for deterministic fixes. The former clock-dependent booking test now runs with a fixed clock and has no time-of-day skip. Engine/planner router and BookRequest time tests use fixed timestamps; pure service tests pass explicit now.
+Latest validation ran against a read-only bind mount of the actual local backend source, with AI_PROVIDER=mock and WATSONX_API_KEY disabled; SQLite overrides isolated the database. Result: **216 passed, 1 skipped, 0 failed**, 2 warnings. Bob's earlier stale-container test report is not validation evidence. See deterministic-reason-codes-plan.md for the recorded command and coverage.
+
+The former clock-dependent booking test now uses a fixed clock with no time-of-day skip. Engine/planner router and BookRequest time tests use fixed timestamps; pure service tests receive explicit now. The only skip is the live smoke without credentials. The earlier live smoke and real frontend flow were not rerun for governance or this documentation update.
 
 Never print credentials, dump environment files, commit secrets or persist raw completions. Dependencies are currently unpinned; SDK 1.8.0 is the tested version, not a requirements pin.
 
@@ -282,7 +281,7 @@ Never print credentials, dump environment files, commit secrets or persist raw c
 1. Resolved: deadline booking test uses a fixed clock and isolates deadline failure from work-window failure; the time-of-day skip is removed.
 2. SQLAlchemy nullable date annotation deprecation warning in models/fixed_block.py.
 3. utcnow-based engine/planner helpers were replaced with fixed-clock timestamps. No utcnow warnings occurred in the latest Python 3.12 suite; unrelated helpers elsewhere remain outside this scope.
-4. Reason-code semantic consistency is unchecked; later candidates received EARLIEST_SLOT.
+4. Resolved: reason-code semantic consistency is backend-derived. Free-text explanations remain model-generated and can still be inaccurate.
 5. Validated model is non-IBM because of Lite/Sydney Granite availability.
 6. Future Granite testing needs a supported runtime/region/deployment.
 7. Five post-chat successes are a small sample, not a guarantee.
@@ -295,20 +294,18 @@ Do not opportunistically clean up warnings or expand architecture. Address them 
 
 ## Current Next Priorities
 
-These are candidates for scoped human review, not authorization to implement:
-- inspect reason-code semantic consistency without weakening candidate or fallback guards;
-- broaden controlled reliability evaluation while protecting credentials and raw-output privacy;
-- assess Granite on supported infrastructure;
-- review frontend interaction tests in a separately approved task, without adding dependencies automatically;
-- evaluate timezone-aware scheduling only as a separate architecture decision;
-- review production UX/deployment separately; the frontend API MVP is already complete.
+1. Visual polish.
+2. Deployment.
+3. Screenshots/GIF/demo evidence.
+4. Presentation/LinkedIn.
+5. Optional real-world usage.
 
-No Auditor Agent, new provider or new feature is part of the completed validation scope.
+These are priorities for separately scoped work, not authorization to add backend features. Keep the current MVP feature-frozen. No Auditor Agent, new provider or reopening of completed architecture decisions is planned. Known limitations remain documented rather than becoming an automatic feature backlog.
 
 ## Before Changing Code
 
 For each major sub-task:
-1. Read AGENTS.md and the current relevant plan/validation record.
+1. Respect the current feature freeze; require explicit scope for any change. Read AGENTS.md and the current relevant plan/validation record.
 2. Inspect the relevant implementation, tests and existing working-tree changes.
 3. Distinguish historical proposals from implemented behavior; report contradictions.
 4. Propose a bounded plan, identify files and affected business rules.
@@ -329,7 +326,7 @@ Without explicit approval, do not add:
 - authentication or OAuth;
 - Redis, Celery or background jobs;
 - microservices, Kubernetes or OpenShift;
-- production UI redesign or deployment;
+- broad production UI redesign or new product features; deployment is a current priority but requires its own approved scope;
 - additional AI providers, including Gemini;
 - autonomous booking without human confirmation;
 - Auditor Agent or other new agents/features.
