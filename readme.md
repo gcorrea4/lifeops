@@ -1,53 +1,33 @@
-
 # LifeOps
 
-LifeOps is a personal decision-support application designed to help organize tasks around fixed commitments such as university, work, travel time, and other events.
+LifeOps helps organize personal tasks around fixed commitments such as university, work, travel, and overnight events. It addresses the difficulty of finding realistic time for tasks with different durations, priorities, and deadlines.
 
-The project is being developed with **IBM Bob**, IBM's agentic AI development tool, used throughout the software development lifecycle for planning, architecture, implementation, testing, debugging, and documentation.
+## How it works
 
-## Problem
+LifeOps combines a deterministic availability engine with an AI recommendation layer. The engine computes candidate slots from scheduling constraints. The PlannerAgent selects a candidate and supplies a concise explanation; AI never creates availability or invents scheduling datetimes.
 
-Managing work, university, study sessions, deadlines, and personal tasks often requires repeated manual planning.
+Recommendations, human decisions, and booking are separate actions. Approving a recommendation leaves the task pending. An explicit booking request revalidates current conflicts and deadlines before creating a scheduled slot.
 
-The main challenge is finding realistic free time without creating conflicts with fixed commitments — especially when some schedules can cross midnight.
+The audit trail records the provider, model, original candidates, recommendation, explanation, fallback status, and human decision. Raw model output and hidden chain-of-thought are not stored.
 
-## Proposed Solution
+## Stack and development
 
-LifeOps combines:
+- React, TypeScript, and Vite frontend scaffold.
+- Python, FastAPI, Pydantic, SQLAlchemy, and MySQL 8 backend.
+- Docker and Docker Compose.
+- pytest with isolated SQLite integration tests.
+- IBM watsonx through the IBM watsonx AI SDK.
 
-- fixed schedule management;
-- task management with duration, priority, and deadlines;
-- a deterministic availability engine;
-- valid time-slot suggestions;
-- user confirmation before scheduling.
+IBM Bob has supported planning and implementation across the software development lifecycle, with human review of plans before Agent implementation. Codex and other tools have also assisted with validation and documentation.
 
-The project is intentionally being built in two stages:
+## Current status
 
-1. **Deterministic scheduling engine** — handles hard constraints and available time.
-2. **AI decision layer** — will later help prioritize and explain recommendations without overriding scheduling rules.
+ST-1 through ST-9, including ST-8 cleanup, are complete. Backend CRUD, deterministic scheduling, PlannerAgent, recommendation and decision endpoints, audit persistence, and real watsonx integration are implemented. The frontend remains a scaffold; deployment is planned.
 
-## Stack
+Recorded automated results: **160 passed, 1 skipped, 0 failed**, with a separate successful real watsonx smoke test.
 
-- React + TypeScript
-- Python + FastAPI
-- MySQL
-- SQLAlchemy
-- Pydantic
-- Docker
-- pytest
-- IBM Bob
+Real IBM Cloud authentication and watsonx Runtime calls were validated using `meta-llama/llama-3-3-70b-instruct`. The provider now uses the chat API with JSON response format. A controlled five-call comparison improved from **2/5 valid structured responses and 3 fallbacks** to **5/5 valid responses and no fallbacks**. This small sample is not a reliability guarantee; explanation semantics still need attention.
 
-## Status
+The real recommendation → human approval → explicit booking flow was validated, including deterministic fallback, audit persistence, and the transition from pending to scheduled only after booking. IBM Granite remains a future validation target because the available Lite/Sydney runtime did not support the planned model.
 
-✅ Week 1 MVP complete
-
-Implemented:
-- fixed commitments
-- task management
-- deterministic availability engine
-- slot suggestions
-- booking with conflict revalidation
-- 114 passing tests
-
-Next:
-AI recommendation and explainability layer.
+See [agent context](agents.md), [watsonx validation record](watsonx-validation-plan.md), and [development log](BOB-DEVELOPMENT-LOG.md) for details.

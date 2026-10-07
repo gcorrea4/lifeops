@@ -1,432 +1,291 @@
 # LifeOps Project Context
 
+Operational context for IBM Bob, Codex, Claude Code, and future coding agents. Updated 2026-10-07. Read this document and the relevant current implementation before changing code.
+
 ## Project Goal
 
-LifeOps is an auditable decision-support application that helps users organize personal tasks around fixed commitments such as university, work, travel time, and other events.
+LifeOps is an auditable decision-support application for organizing personal tasks around university, work, travel, and other fixed commitments.
 
-The system is intentionally divided into two layers:
-
+The two layers are intentionally separate:
 1. deterministic scheduling and business constraints;
-2. an AI recommendation and decision layer.
+2. AI recommendation, explanation, and human decision recording.
 
-Deterministic rules always have priority over AI recommendations.
-
-AI must never override hard scheduling constraints.
-
----
+Deterministic rules have priority. AI must never override hard scheduling constraints. Keep the architecture simple, readable, and within approved scope; prefer pure deterministic functions and avoid unnecessary frameworks, abstractions, or microservices.
 
 ## Current Status
 
-### ST-1 — Project Scaffold
+| Milestone | Status | Implemented scope |
+|---|---|---|
+| ST-1 | Complete | React/TypeScript/Vite scaffold, FastAPI, health endpoint, Docker networking and MySQL healthcheck |
+| ST-2 | Complete | SQLAlchemy domain models, recurrence, overnight blocks, constraints, indexes and FK cascade |
+| ST-3 | Complete | Pydantic create/update/read schemas and request-local validation |
+| ST-4 | Complete | CRUD, merged PATCH validation, derived fields, consistent errors and atomic slot deletion/status reset |
+| ST-5 | Complete | Pure deterministic engine, suggestions and explicit booking with current-state revalidation |
+| ST-6 | Complete | AI foundation, structured schemas, provider abstraction and AIRecommendation audit model |
+| ST-7 | Complete | PlannerAgent, candidate selection, output guards and deterministic fallback |
+| ST-8 | Complete | Planner service and recommend/decision routes with audit persistence |
+| ST-8 cleanup | Complete | Candidate-ID contract, injected-provider audit metadata, planner from_date validation and regression coverage |
+| ST-9 | Complete | AI test coverage and real watsonx validation; credential-gated smoke test and chat migration validated |
 
-Completed.
+Historical plans use differing stage numbering in places. Their unchecked boxes and proposed contracts are not the current specification.
 
-Implemented:
+Recorded automated suite: **160 passed, 1 skipped, 0 failed**. Real credential-gated smoke test run separately: **1 passed**. These are recorded validation results, not a guarantee of a fresh run.
 
-- React + TypeScript + Vite scaffold;
-- FastAPI scaffold;
-- MySQL via Docker Compose;
-- GET /health;
-- Docker networking;
-- MySQL healthcheck.
+The frontend is still the stock scaffold, not an integrated scheduling/planner UI. No authentication or deployed production environment exists. The backend API flow is validated.
 
-### ST-2 — Database Models
+## Approved Stack and Repository Map
 
-Completed.
+- Frontend: React, TypeScript, Vite.
+- Backend: Python, FastAPI, Pydantic, SQLAlchemy.
+- Development database: MySQL 8, Docker Compose.
+- Tests: pytest, FastAPI TestClient, isolated SQLite in memory.
+- AI: IBM watsonx via ibm-watsonx-ai; MockProvider for deterministic tests.
+- Development: IBM Bob with human review; Codex and other tools may assist.
+- Planned deployment only: Vercel, Azure App Service, Azure Database for MySQL.
 
-Implemented:
+Relevant backend directories under `backend/app/`:
+- `models/`: persisted domain and audit records.
+- `schemas/`: HTTP contracts.
+- `services/engine.py`: pure availability calculations.
+- `services/planner.py`: recommendation and human-decision application rules.
+- `routers/`: database loading, HTTP orchestration, explicit booking.
+- `ai/agent.py`, `ai/schemas.py`, `ai/provider.py`: prompt, model-output guards and provider transport.
+- `core/settings.py`: environment-backed configuration.
 
-- SQLAlchemy setup;
-- fixed_blocks;
-- tasks;
-- scheduled_slots;
-- weekly and one-off recurrence;
-- overnight blocks using spans_next_day;
-- one ScheduledSlot maximum per Task;
-- FK cascade;
-- database constraints and indexes.
+`backend/tests/` contains isolated engine, CRUD, AI, router and mocked chat tests plus the credential-gated live smoke test. Docker Compose runs MySQL and API, not the frontend. Application lifespan currently creates tables through SQLAlchemy metadata; do not invent a migration framework.
 
-### ST-3 — Pydantic Schemas
+## Do Not Regress These Decisions
 
-Completed.
+- The deterministic engine owns scheduling validity and remains independent from AI.
+- AI receives only deterministic candidates; it never creates availability or invents datetimes.
+- The model selects `recommended_candidate_id` only. PlannerAgent resolves datetimes from the original input candidate list.
+- Recommend → decision → engine/book are three separate actions.
+- `/planner/decision` never creates a ScheduledSlot or mutates Task.status.
+- APPROVED ignores chosen_start/chosen_end and uses the persisted recommended slot.
+- MODIFIED requires an exact slot from the original persisted candidate list, not a refreshed engine response.
+- REJECTED has no final selected slot and books nothing.
+- `/engine/book` must revalidate current state; an earlier candidate or approval is not proof of current availability.
+- ScheduledSlot creation and Task.status update are one atomic commit.
+- Audit provider/model metadata comes from the actually injected provider instance.
+- Raw completions, credentials and hidden chain-of-thought are not persisted.
+- Model/provider failures preserve the deterministic fallback.
+- Invalid provider configuration fails explicitly; it must not silently select MockProvider.
+- Pydantic handles request-local rules; merged-state domain rules belong in the application layer.
+- Derived fields are computed server-side; tests must not use development MySQL.
 
-Implemented:
+## Domain Rules
 
-- FixedBlockCreate;
-- FixedBlockUpdate;
-- FixedBlockRead;
-- TaskCreate;
-- TaskUpdate;
-- TaskRead;
-- ScheduledSlotRead;
-- SlotSuggestion;
-- BookRequest.
+### User
 
-Architecture decision:
+No authentication yet. Temporary user_id = 1. Do not imply tenant isolation or production access control.
 
-Pydantic validates request-local rules only.
+### FixedBlock
 
-Rules that require persisted state are handled by the application layer after combining the database record with the incoming PATCH payload.
+Unavailable time supports `weekly` and `once` recurrence:
+- weekly requires weekday 0–6 and forbids date;
+- once requires date and forbids weekday;
+- equal start_time/end_time is invalid;
+- crossing midnight is allowed;
+- spans_next_day is computed as end_time < start_time.
 
-### ST-4 — CRUD Routers & Application Rules
+PATCH must combine stored fields with incoming fields before recurrence validation and derived-field calculation. Do not mutate the row before validating the merged state. Overnight occupancy includes the following day and previous-day tails when examining a date.
 
-Completed.
+### Task
 
-Implemented:
+- duration_minutes > 0.
+- Priority: low, medium or high; default medium.
+- Deadline is optional. Newly assigned deadlines cannot be in the past.
+- Existing tasks may naturally become overdue; unrelated PATCH operations must not reject them.
+- New tasks start pending; create/update schemas do not expose status.
+- Status enum: pending, scheduled, done. A done-transition endpoint is not implemented.
 
-- FixedBlock CRUD;
-- Task CRUD;
-- ScheduledSlot read/delete endpoints;
-- PATCH merge logic;
-- recurrence validation after merge;
-- spans_next_day calculation;
-- conditional deadline validation;
-- consistent HTTP errors;
-- atomic ScheduledSlot deletion + Task status reset.
+### ScheduledSlot
 
-### ST-5 — Deterministic Availability Engine
+- At most one per Task, enforced by a unique task_id constraint.
+- Generic creation is not exposed; creation occurs through POST /api/v1/engine/book.
+- End is computed from start plus stored task duration.
+- Deletion resets the task to pending and deletes the slot atomically.
+- Relevant task foreign keys use cascade deletion.
 
-Completed.
+## Deterministic Engine Rules
 
-Implemented:
+GET /api/v1/engine/suggest loads a pending Task and current commitments/slots. Optional from_date defaults to today; past dates are rejected. Default lookahead is seven days; at most ten candidates are returned in ascending start order.
 
-- GET /api/v1/engine/suggest;
-- POST /api/v1/engine/book;
-- configurable work window;
-- default 7-day lookahead;
-- maximum 10 suggestions;
-- optional from_date;
-- past from_date rejection;
-- deadline enforcement;
-- overnight FixedBlock handling;
-- previous-day overnight occupancy;
-- ScheduledSlot conflict detection;
-- merge of overlapping and adjacent intervals;
-- free interval calculation;
-- duration filtering;
-- booking-time conflict revalidation;
-- atomic slot creation + Task status update.
+The pure service normalizes occupied intervals, includes overnight blocks and previous-day tails, merges overlapping and adjacent intervals, computes free intervals within configured working hours, and emits duration-sized slots. Intervals use [start, end), so touching boundaries are not conflicts.
 
-Current test suite:
+Work-window defaults are 08:00–22:00. Deadline enforcement is inclusive:
+`end_datetime <= datetime.combine(task.deadline, WORK_END)`.
+A candidate ending exactly at WORK_END on the deadline date is valid.
 
+POST /api/v1/engine/book:
+1. loads the Task and requires pending;
+2. normalizes the requested start to a naive datetime and requires a future start;
+3. computes end server-side;
+4. validates the deadline ceiling;
+5. checks current FixedBlocks, including overnight occupancy;
+6. checks current ScheduledSlots;
+7. creates a ScheduledSlot and sets status scheduled in one commit.
 
-114 passed
-0 failed
-1 skipped
+Do not trust a previous suggestion. The book endpoint accepts task_id/start_datetime; it does not require recommendation_id or an approval audit row. Human approval is an explicit workflow step, not a server-enforced linkage between these endpoints.
 
-The skipped test is time-dependent and is tracked as technical debt.
-Week 1 Status
-Week 1 MVP is complete.
-The application now supports:
-React
--> FastAPI
--> MySQL
--> deterministic availability engine
--> slot suggestions
--> user confirmation / booking
+Implementation limitations requiring separate scoped work:
+- Suggesting from today can include already elapsed times; booking rejects past starts.
+- Booking currently has no explicit WORK_START/WORK_END boundary check beyond its deadline ceiling. Suggestion generation does enforce the work window. Preserve the intended hard-constraint architecture without claiming this missing check exists.
+- Datetimes are currently naive; stripping tzinfo is not timezone conversion. Do not imply comprehensive timezone support.
 
-No AI was used for hard scheduling decisions.
-Current Next Phase
-Week 2 — AI Decision Layer.
-The AI layer must consume only slots that have already been validated by the deterministic engine.
-The AI layer must not create availability or bypass scheduling constraints.
-Week 2 Goal
-Add explainable AI recommendations on top of the deterministic scheduling engine.
-Target flow:
-Deterministic Engine
-        ↓
-Valid Slots
-        ↓
-Planner Agent
-        ↓
-Recommendation
-        ↓
-Explanation
-        ↓
-Human Approval / Rejection
-        ↓
-Audit Trail
+## PlannerAgent Contract and Fallback
 
-Approved Stack
-Frontend
-- React
-- TypeScript
-- Vite
-Backend
-- Python
-- FastAPI
-Database
-- MySQL 8
-- SQLAlchemy
-Validation
-- Pydantic
-Testing
-- pytest
-- FastAPI TestClient
-- SQLite in-memory database for isolated tests
-Containers
-- Docker
-- Docker Compose
-Planned Deployment
-- Vercel
-- Azure App Service
-- Azure Database for MySQL
-AI
-Planned primary provider:
-- IBM watsonx
-- IBM Granite models
-Possible fallback provider only if explicitly approved:
-- Gemini
-Agentic Development
-- IBM Bob
-Architecture Principles
-- Keep the architecture simple.
-- Avoid premature microservices.
-- Avoid unnecessary abstractions.
-- Do not introduce new frameworks without justification.
-- Prefer pure functions for deterministic engine logic.
-- Prefer readable code over clever abstractions.
-- Business constraints must remain deterministic.
-- AI must never override hard scheduling constraints.
-- AI must receive only valid deterministic options.
-- Users remain in control of final scheduling decisions.
-- AI recommendations must be auditable.
-- AI outputs should be structured.
-- Do not store hidden chain-of-thought.
-- Store concise decision explanations instead.
-- Derived domain fields are computed server-side.
-- Credentials must come from environment variables.
-- Never commit secrets.
-- Do not silently change approved architecture.
-- Do not expand a sub-task beyond its approved scope without explicit approval.
-Current Domain Rules
-User
-- No authentication yet.
-- Temporary user_id = 1.
-FixedBlock
-FixedBlocks represent unavailable time.
-Supported recurrence types:
-weekly
-once
+POST /api/v1/planner/recommend accepts task_id and optional from_date. It loads a pending task and obtains candidates through the deterministic service, not an HTTP round trip. Past from_date is rejected just as in engine/suggest.
 
-Rules:
-- weekly requires weekday;
-- weekly forbids date;
-- once requires date;
-- once forbids weekday;
-- weekday range is 0–6;
-- start_time == end_time is invalid;
-- blocks may cross midnight;
-- spans_next_day is derived server-side;
-- spans_next_day = end_time < start_time.
-Task
-Tasks represent work that should be scheduled.
-Rules:
-- duration_minutes must be greater than zero;
-- deadline is optional;
-- new deadline values cannot be explicitly set in the past;
-- existing tasks may naturally become overdue;
-- new tasks start as pending;
-- TaskUpdate does not expose status.
-Current statuses:
-pending
-scheduled
-done
+The prompt contains task title, duration, priority, deadline and indexed deterministic candidates. Model output contract:
 
-ScheduledSlot
-ScheduledSlot represents a confirmed task allocation.
-Rules:
-- one Task may have at most one ScheduledSlot;
-- generic ScheduledSlot creation is not exposed;
-- creation happens through POST /engine/book;
-- deleting a ScheduledSlot resets the related Task to pending;
-- status reset and slot deletion must happen atomically.
-Deterministic Engine Rules
-The deterministic engine is authoritative for hard constraints.
-It must remain independent from AI.
-Suggest
-GET /api/v1/engine/suggest:
-1. loads the Task;
-2. requires Task.status == pending;
-3. uses configurable work window;
-4. uses default 7-day lookahead;
-5. accepts optional from_date;
-6. rejects past from_date;
-7. collects relevant FixedBlocks;
-8. includes overnight occupancy from the previous day;
-9. collects ScheduledSlots;
-10. normalizes intervals;
-11. merges overlapping and adjacent intervals;
-12. computes free intervals;
-13. filters by duration;
-14. respects deadline;
-15. returns at most 10 suggestions ordered by start_datetime ascending.
-Deadline
-A task must start and finish within the configured working window of the deadline date.
-Inclusive boundary:
-end_datetime <= datetime.combine(task.deadline, WORK_END)
-
-A task ending exactly at WORK_END on the deadline date is valid.
-Booking
-POST /api/v1/engine/book must always revalidate current availability.
-It must never trust a previously generated suggestion.
-Expected flow:
-load Task
-↓
-validate pending
-↓
-compute end_datetime
-↓
-validate deadline
-↓
-check FixedBlock collision
-↓
-check ScheduledSlot collision
-↓
-create ScheduledSlot
-↓
-Task.status = scheduled
-↓
-single atomic commit
-
-Week 2 AI Rules
-The AI layer must not decide whether a slot is valid.
-Validity belongs exclusively to the deterministic engine.
-The AI layer may:
-- rank valid slots;
-- recommend one of the valid slots;
-- explain why it recommends a slot;
-- consider Task priority;
-- consider deadline proximity;
-- consider user feedback;
-- compare multiple valid options.
-The AI layer must not:
-- invent unavailable slots;
-- bypass FixedBlocks;
-- bypass ScheduledSlots;
-- schedule outside the work window;
-- ignore deadlines;
-- directly mutate Task.status;
-- book without deterministic revalidation.
-Explainability Rules
-Do not store hidden chain-of-thought.
-Store structured explanations instead.
-Example:
+```json
 {
-  "recommended_slot": "2026-10-05T14:00:00",
-  "reason_codes": [
-    "DEADLINE_CLOSE",
-    "HIGH_PRIORITY",
-    "EARLY_VALID_SLOT"
-  ],
-  "explanation": "This slot was recommended because the task has a close deadline and this is one of the earliest valid windows."
+  "recommended_candidate_id": 0,
+  "reason_codes": ["HIGH_PRIORITY", "EARLIEST_SLOT"],
+  "explanation": "This valid candidate offers an early start for a high-priority task."
 }
+```
 
-Future AI responses should prefer structured JSON-like outputs over free-form prose.
-Human-in-the-Loop Rules
-AI recommendations are suggestions.
-The user must be able to:
-Approve
-Modify
-Reject
+This example documents the contract; it does not mean the production prompt was rewritten during chat migration.
 
-Booking must only occur after explicit user confirmation.
-Future feedback should be stored for auditability and later analysis.
-Planned Auditability
-Future AI decisions should record:
-- decision id;
-- timestamp;
-- task id;
-- model/provider;
-- candidate slots;
-- recommended slot;
-- reason codes;
-- concise explanation;
-- user action;
-- final selected slot.
-Do not store sensitive secrets or hidden model reasoning.
-Error Handling Principles
-Use standard FastAPI errors.
-Examples:
-404
-resource not found
+PlannerAgent owns fence removal, json.loads, Pydantic validation, candidate bounds, reason-code validation and candidate lookup. It limits the stored explanation to 200 characters.
 
-409
-state conflict
+Allowed reason codes:
+- DEADLINE_CLOSE
+- HIGH_PRIORITY
+- MEDIUM_PRIORITY
+- EARLIEST_SLOT
+- MOST_BUFFER_BEFORE_DEADLINE
+- ONLY_SLOT_AVAILABLE
+- PROVIDER_FALLBACK — reserved for system fallback; model output using it is rejected.
 
-422
-invalid business input
+AI may rank or compare valid options and explain priority/deadline considerations. It must not bypass commitments, invent availability, mutate Task.status or book. Feedback is recorded for audit; no learned-feedback pipeline is implemented.
 
-Do not create a custom exception framework unless there is a real need.
-Testing Principles
-Tests must not connect to the real development MySQL database.
-Current integration tests use:
-- SQLite in-memory;
-- StaticPool;
-- check_same_thread=False;
+Malformed JSON, invalid schema/candidate/reason codes or ProviderError selects the first deterministic candidate, sets fallback_used=true and uses PROVIDER_FALLBACK with a concise default explanation. A fallback still has a valid recommended slot. Empty candidates cannot produce a recommendation: the route returns 422.
+
+Reason-code membership is validated, semantic truth is not. A valid structured response can still use EARLIEST_SLOT inaccurately for a later candidate.
+
+## HTTP and Human Decision Rules
+
+All application routes use /api/v1.
+- POST /planner/recommend: HTTP 201, including deterministic fallback. Returns recommendation_id, task_id, recommended_slot, reason_codes, explanation, original candidate_slots and fallback_used.
+- POST /planner/decision: HTTP 200, records APPROVED/MODIFIED/REJECTED only.
+- POST /engine/book: HTTP 201 after explicit booking and current-state validation.
+- GET /health: basic application health response.
+
+APPROVED uses stored recommended_start/end even when chosen fields are provided. MODIFIED requires both chosen fields to exactly match a stored candidate after current naive datetime normalization. REJECTED leaves final_start/final_end null. A repeated decision returns 409. Multiple recommendations for a pending task are allowed; do not invent database uniqueness for decisions.
+
+Use standard FastAPI errors: 404 missing resource, 409 state/conflict, 422 invalid business input. No custom exception framework is needed.
+
+## Auditability
+
+Each successful recommend request persists AIRecommendation with:
+- id, created_at, task_id, user_id;
+- provider and model_id from the injected instance;
+- original full candidate_slots_json;
+- recommended_start/end, reason_codes, concise explanation and fallback_used;
+- user_action and final_start/end populated by the later decision.
+
+The original list is immutable decision context for MODIFIED validation. Final fields record the human decision, not proof of booking. Do not store raw model output, hidden reasoning or secrets. Do not reconstruct provider metadata from settings when a different instance was injected.
+
+## Provider Rules and Real watsonx State
+
+AbstractProvider.complete(prompt) -> str remains the interface. provider_name and model_id are read-only audit metadata. MockProvider returns its configured string; default mock dependency returns "{}" and therefore uses PlannerAgent fallback. It is not a production AI substitute.
+
+WatsonxProvider imports the SDK lazily and obtains credentials/configuration from environment-backed settings. Current transport:
+- ModelInference.chat();
+- one user message containing the unchanged PlannerAgent prompt;
+- temperature=0, max_tokens=512;
+- response_format={"type":"json_object"};
+- returns choices[0].message.content as a string only.
+
+Transport shape errors and upstream failures become ProviderError. JSON parsing and domain validation must remain in PlannerAgent.
+
+Unknown AI_PROVIDER raises ConfigurationError when the dependency is resolved. Despite a provider docstring saying “startup,” lifespan does not currently validate it.
+
+Real IBM Cloud authentication, watsonx project/Runtime and smoke test are validated. SDK tested: 1.8.0. Validated runtime model: meta-llama/llama-3-3-70b-instruct. The code's default model setting remains granite-4-1-8b; distinguish defaults from the actual validated environment.
+
+The available Lite/Sydney runtime did not support the planned Granite model. A non-IBM model is currently used through IBM watsonx. Future Granite validation may require a supported region/runtime/deployment; do not silently change provider or force broad workarounds.
+
+The deprecated text-generation transport was replaced by chat with accepted JSON response format. The /ml/v1/text/generation deprecation warning disappeared. Controlled reliability: before 2/5 valid, 3/5 malformed-JSON fallbacks; after 5/5 valid, 0/5 fallbacks. This small sample does not establish production reliability.
+
+The real persisted end-to-end flow was validated using the earlier fallback recommendation: approval left Task pending and no slot existed until explicit engine/book created it and set scheduled. The later five-call chat comparison did not create bookings or audit rows.
+
+## Testing Rules
+
+Automated tests must not connect to development MySQL:
+- SQLite in memory, StaticPool, check_same_thread=False;
 - foreign_keys enabled;
-- get_db dependency override.
-Future AI tests should:
-- mock external AI providers;
-- never require real watsonx credentials in unit tests;
-- validate structured output;
-- validate invalid AI output handling;
-- verify deterministic constraints remain authoritative;
-- verify booking still revalidates availability.
-Do not reduce existing test coverage.
-Current Known Technical Debt
-SQLAlchemy warning
-SQLAlchemy 2.1 emits one deprecation warning related to the nullable date annotation in:
-models/fixed_block.py
+- get_db dependency override;
+- application engine patched so lifespan table creation is isolated.
 
-It does not currently affect functionality.
-Time-dependent test
-One deadline-related booking test is currently skipped depending on the current time of day.
-Future cleanup should make time-based tests deterministic by injecting or freezing the clock instead of relying directly on the real current time.
-Do not modify these items unless:
-- they cause a functional issue; or
-- a dedicated cleanup task is approved.
-Development Workflow
-For every major sub-task:
-1. read AGENTS.md;
-2. read the current plan file;
-3. inspect only relevant code;
-4. propose a plan;
-5. identify files to create or modify;
-6. identify business rules affected;
-7. identify tests required;
-8. wait for user approval;
-9. implement only approved scope;
-10. run relevant tests;
-11. report warnings and errors;
-12. do not silently expand scope;
-13. update documentation after completion.
-Preferred workflow with IBM Bob:
-Plan
-↓
-Human review
-↓
-Agent
-↓
-Tests
-↓
-Validation
-↓
-Commit
+Mock external AI calls. Unit/integration tests require no real credentials. Only the explicitly credential-gated watsonx smoke test may make a live call; it asserts nonempty string connectivity, not PlannerAgent JSON correctness, and does not print raw output.
 
-Do Not Implement Yet
-Until explicitly approved, do not add:
-- authentication;
-- OAuth;
-- Redis;
-- Celery;
-- background jobs;
-- microservices;
-- Kubernetes;
-- OpenShift;
-- production UI redesign;
-- additional AI providers;
-- autonomous booking without user confirmation.
-Those belong to later phases or require explicit approval.
+Preserve coverage for parsing/schema/invalid codes/candidate bounds/fallback, injected-provider audit metadata, from_date, human decision semantics and deterministic booking conflicts. Chat transport tests verify parameters, text passthrough, malformed response shapes and upstream errors. Do not reduce coverage or make tests depend on model-specific prose.
 
-Esse é o momento certo para atualizar, porque agora o `AGENTS.md` deixa de ser “guia da Semana 1” e passa a preparar o Bob para a fase que realmente diferencia o projeto: **IA em cima de uma base determinística já validada**.
+Recorded validation commands, executed in the API container:
+```text
+docker compose exec -T -e WATSONX_API_KEY= api python -m pytest tests -q -p no:cacheprovider
+docker compose exec -T api python -m pytest tests/test_watsonx_provider.py -v -p no:cacheprovider
+```
+The first deliberately disables live credentials: 160 passed, 1 skipped, 0 failed. Its skip was the smoke test. The separate live smoke passed. The pre-existing clock-dependent booking test can also skip depending on execution time; do not automatically attribute every single skip to it.
+
+Never print credentials, dump environment files, commit secrets or persist raw completions. Dependencies are currently unpinned; SDK 1.8.0 is the tested version, not a requirements pin.
+
+## Known Technical Debt and Limits
+
+1. Pre-existing deadline booking test uses real time and can skip; scoped clock injection/freezing remains future work.
+2. SQLAlchemy nullable date annotation deprecation warning in models/fixed_block.py.
+3. datetime.utcnow() deprecation warnings in existing test helpers.
+4. Reason-code semantic consistency is unchecked; later candidates received EARLIEST_SLOT.
+5. Validated model is non-IBM because of Lite/Sydney Granite availability.
+6. Future Granite testing needs a supported runtime/region/deployment.
+7. Five post-chat successes are a small sample, not a guarantee.
+8. Booking work-window and same-day elapsed-candidate gaps described above.
+9. Existing Starlette/httpx and third-party model license warnings remain; chat removed only the text-generation deprecation warning.
+
+Do not opportunistically clean up warnings or expand architecture. Address them only when functionally necessary or through approved dedicated work.
+
+## Current Next Priorities
+
+These are candidates for scoped human review, not authorization to implement:
+- inspect reason-code semantic consistency without weakening candidate or fallback guards;
+- broaden controlled reliability evaluation while protecting credentials and raw-output privacy;
+- assess Granite on supported infrastructure;
+- review deterministic booking work-window enforcement and same-day suggestions;
+- make time-dependent tests deterministic in a dedicated cleanup;
+- plan frontend API integration separately.
+
+No Auditor Agent, new provider or new feature is part of the completed validation scope.
+
+## Before Changing Code
+
+For each major sub-task:
+1. Read AGENTS.md and the current relevant plan/validation record.
+2. Inspect the relevant implementation, tests and existing working-tree changes.
+3. Distinguish historical proposals from implemented behavior; report contradictions.
+4. Propose a bounded plan, identify files and affected business rules.
+5. Identify required tests and credential/database boundaries.
+6. Obtain human approval before an unapproved major scope; existing explicit authorization remains valid.
+7. Implement only that scope and preserve the invariants above.
+8. Run appropriate isolated tests; run live checks only when authorized.
+9. Report results, warnings, limitations and files changed.
+10. Update documentation; do not silently expand scope or commit unless requested.
+
+Preferred Bob workflow: Plan → human review → Agent implementation → tests → validation → reviewed commit. Bob is not the only tool that may assist.
+
+Read README for the external overview, watsonx-validation-plan.md for completed real validation, and BOB-DEVELOPMENT-LOG.md for chronology. lifeops-week1-plan.md, lifeops-week2-plan.md, lifeops-st*-plan.md and the pre-chat watsonx-e2e-validation-report.md retain historical proposals/results; their stale unchecked tasks, datetime-output examples and settings-derived audit suggestions must not override current contracts.
+
+## Do Not Implement Yet
+
+Without explicit approval, do not add:
+- authentication or OAuth;
+- Redis, Celery or background jobs;
+- microservices, Kubernetes or OpenShift;
+- production UI redesign or deployment;
+- additional AI providers, including Gemini;
+- autonomous booking without human confirmation;
+- Auditor Agent or other new agents/features.
+
+Those belong to later phases or separate approved scope. Never silently change the approved architecture.

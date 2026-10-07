@@ -1,143 +1,110 @@
-# watsonx Validation Plan
+# watsonx Validation Record
 
-## Overview
+Status: **complete**, including real provider validation, human-in-the-loop flow, and the chat transport migration. Updated 2026-10-07. This file replaces obsolete text-generation implementation instructions with the validated current state.
 
-The goal is to validate that the existing `WatsonxProvider` works correctly with a real
-IBM watsonx / Granite call. All infrastructure is already in place:
+## Runtime and Connectivity
 
-- `WatsonxProvider` in `backend/app/ai/provider.py` is fully implemented.
-- `ibm-watsonx-ai` is already in `requirements.txt`.
-- All credentials are read from environment variables via `settings`.
-- `get_provider()` switches to `WatsonxProvider` when `AI_PROVIDER=watsonx`.
+IBM watsonx project and Runtime configuration, real IBM Cloud API authentication, and WatsonxProvider model calls were validated.
 
-The plan requires **three small, focused changes**:
+- Provider: watsonx.
+- Validated runtime model: meta-llama/llama-3-3-70b-instruct.
+- SDK used for chat validation: ibm-watsonx-ai 1.8.0.
+- Current code default model: granite-4-1-8b, distinct from the validated environment.
 
-1. Verify and fix the `generate_text()` return value handling (the SDK may return a `dict`
-   instead of a plain `str` in some versions; add a safe extraction guard).
-2. Add a single integration smoke-test that is skipped when credentials are absent.
-3. Update `.env.example` with the correct variable names (currently named `.env.exemple`).
+The available Lite/Sydney runtime did not support the planned IBM Granite model. The current non-IBM model runs through IBM watsonx. Future Granite validation may require another supported region/runtime/deployment; no alternative provider was added.
 
-No architecture changes. No new agents. No new routes.
+Original ST-9 work is complete: provider response handling, credential-gated smoke test, and the corrected .env.example template. Historical generate_text extraction instructions are superseded by chat. No credentials belong in this document.
 
----
+## Text Generation → Chat Migration
 
-## Sub-Tasks
+WatsonxProvider.complete() moved from deprecated text generation to ModelInference.chat(). The real model/API accepted:
+```json
+{
+  "temperature": 0,
+  "max_tokens": 512,
+  "response_format": {"type": "json_object"}
+}
+```
 
----
+The unchanged PlannerAgent prompt is sent as one user message. The provider extracts choices[0].message.content and returns only a string through complete(prompt) -> str. It does not parse JSON or validate candidate IDs/reason codes. Invalid transport shapes and upstream errors become ProviderError.
 
-### ST-9-A — Harden generate_text response extraction
+PlannerAgent retains json.loads, Pydantic validation, reason-code membership, reserved fallback-code rejection, candidate bounds and deterministic lookup/fallback. Provider/model audit metadata remains sourced from the injected instance. No prompt changes, retries without JSON mode, or architectural workarounds were necessary.
 
-**Status:** `[x] done`
+The deprecated /ml/v1/text/generation warning disappeared from the real support probe, smoke test and five-call comparison. Existing test and third-party license warnings remain.
 
-**Intent**
+## Controlled Reliability Comparison
 
-`ibm-watsonx-ai >= 1.x` `ModelInference.generate_text()` returns a plain `str`.
-Some SDK versions or call configurations may return a `dict` with a `"generated_text"` key
-instead. A one-line guard inside `WatsonxProvider.complete()` ensures `complete()` always
-returns a `str`, regardless of SDK version, so `PlannerAgent._parse_response()` never
-receives unexpected input.
+The same five pending test scenarios and deterministic candidate context were used before and after migration (Tasks 3–7, from_date 2026-10-08).
 
-**Expected Outcomes**
+| Scenario | Candidates | Before | After candidate ID | After reason codes |
+|---|---:|---|---:|---|
+| High priority, close deadline / Task 3 | 10 | Valid | 0 | EARLIEST_SLOT, DEADLINE_CLOSE, HIGH_PRIORITY |
+| Medium priority / Task 4 | 10 | Fallback | 6 | MEDIUM_PRIORITY, EARLIEST_SLOT |
+| Longer duration / Task 5 | 10 | Fallback | 7 | HIGH_PRIORITY, MOST_BUFFER_BEFORE_DEADLINE |
+| Multiple valid candidates / Task 6 | 10 | Fallback | 0 | MEDIUM_PRIORITY, EARLIEST_SLOT |
+| Only one valid candidate / Task 7 | 1 | Valid | 0 | DEADLINE_CLOSE, HIGH_PRIORITY, ONLY_SLOT_AVAILABLE |
 
-- `WatsonxProvider.complete()` always returns `str`.
-- If the SDK returns a `dict`, the `"generated_text"` field is extracted.
-- If neither a `str` nor a recognisable `dict` arrives, a `ProviderError` is raised
-  (which triggers the existing deterministic fallback).
-- Existing tests remain green.
+**Before:** 2/5 structured responses valid; 3/5 deterministic fallbacks.
+**After:** 5/5 structured responses valid; 0/5 fallbacks.
 
-**Todo List**
+All three earlier failures were malformed JSON, not connectivity failures:
+- Task 4: unquoted reason_codes; markdown fences were removable, but the JSON remained invalid.
+- Task 5: unquoted reason_codes.
+- Task 6: unquoted reason_codes, repeated objects/prose and an incomplete ending consistent with truncation. Finish metadata was not captured, so truncation was not independently confirmed.
 
-1. Read the current `complete()` method in `backend/app/ai/provider.py`.
-2. After `response = model.generate_text(prompt=prompt)`, add:
-   ```python
-   if isinstance(response, dict):
-       response = response.get("generated_text", "")
-   if not isinstance(response, str):
-       raise ProviderError(f"Unexpected response type: {type(response)}")
-   ```
-3. Run `pytest backend/tests/` to confirm no regressions.
+All three failed json.loads with `Expecting value: line 3 column 20 (char 54)`. No post-chat fallback occurred, so there is no raw failure reason for that round.
 
-**Relevant Context**
+This is a small controlled sample, not a reliability guarantee or production failure-rate estimate. Structural validity is not semantic accuracy: candidate 6 received EARLIEST_SLOT, and a later candidate received MOST_BUFFER_BEFORE_DEADLINE. Existing guards validate membership, not the truth of these explanations.
 
-- File: `backend/app/ai/provider.py`, `WatsonxProvider.complete()`, lines 82–97.
-- The `PlannerAgent._parse_response()` in `backend/app/ai/agent.py` expects a `str`.
+The comparison called the real PlannerAgent path directly with a capture-only provider wrapper. It did not insert new audit rows or book tasks; Tasks 3–7 remained pending. Raw failure output was captured locally for diagnosis only, never in ai_recommendations. No raw output or credentials are reproduced here.
 
----
+## Real End-to-End Validation
 
-### ST-9-B — Add a credential-gated smoke test for WatsonxProvider
+The persisted real flow was completed before chat migration, using recommendation_id=1 with fallback_used=true:
 
-**Status:** `[x] done`
+Task → deterministic engine → valid candidates → real watsonx call → PlannerAgent fallback → persisted AIRecommendation → human APPROVED → explicit engine/book → current-state revalidation → ScheduledSlot.
 
-**Intent**
-
-Add a single pytest test that:
-
-- Is automatically **skipped** when `WATSONX_API_KEY` is not set (safe in CI).
-- Calls `WatsonxProvider.complete()` with a minimal prompt when credentials are present.
-- Asserts the result is a non-empty `str`.
-- Does not assert specific JSON structure — this is a connectivity smoke test, not a
-  PlannerAgent test.
-
-This test acts as the manual validation gate before enabling `AI_PROVIDER=watsonx` in any
-deployed environment.
-
-**Expected Outcomes**
-
-- `backend/tests/test_watsonx_provider.py` exists with one test function.
-- Running `pytest` without credentials: 1 skip, no failures.
-- Running `pytest` with real credentials exported: the test passes and prints the raw response.
-
-**Todo List**
-
-1. Create `backend/tests/test_watsonx_provider.py`.
-2. Use `pytest.importorskip` or `pytest.mark.skipif` on `settings.WATSONX_API_KEY == ""`.
-3. Instantiate `WatsonxProvider()` and call `.complete("Return the word HELLO as JSON: {\"word\": \"HELLO\"}")`.
-4. Assert `isinstance(result, str)` and `len(result) > 0`.
-5. Run `pytest backend/tests/test_watsonx_provider.py -v` to confirm the skip behaviour.
-
-**Relevant Context**
-
-- File to create: `backend/tests/test_watsonx_provider.py`.
-- Settings file: `backend/app/core/settings.py` — `WATSONX_API_KEY` defaults to `""`.
-- Provider: `backend/app/ai/provider.py`, `WatsonxProvider`.
-- Existing pattern reference: `backend/tests/test_planner_agent.py`.
-
----
-
-### ST-9-C — Fix .env.example filename and add missing variable documentation
-
-**Status:** `[x] done`
-
-**Intent**
-
-The current template is named `.env.exemple` (typo). Rename it to `.env.example` (standard
-convention) and ensure all five watsonx variables are present with inline comments.
-
-**Expected Outcomes**
-
-- `.env.example` exists at the project root with the correct filename.
-- All five variables are documented: `AI_PROVIDER`, `WATSONX_API_KEY`, `WATSONX_PROJECT_ID`,
-  `WATSONX_URL`, `WATSONX_MODEL_ID`.
-- The old `.env.exemple` file is removed (or renamed).
-
-**Todo List**
-
-1. Read the current `.env.exemple` content.
-2. Create `.env.example` with corrected content (all five watsonx variables with comments).
-3. Delete `.env.exemple`.
-
-**Relevant Context**
-
-- Current file: `.env.exemple` at workspace root.
-- Settings: `backend/app/core/settings.py` — the five `WATSONX_*` fields.
-
----
-
-## Files Changed
-
-| File | Action |
+| Action/check | Recorded result |
 |---|---|
-| `backend/app/ai/provider.py` | Modify — add response-type guard in `complete()` |
-| `backend/tests/test_watsonx_provider.py` | Create — credential-gated smoke test |
-| `.env.example` | Create — corrected filename with all watsonx variables |
-| `.env.exemple` | Delete — typo filename |
+| POST /api/v1/planner/recommend | HTTP 201; Task 1; recommendation_id=1; deterministic valid recommended slot; fallback_used=true |
+| Audit persistence | provider=watsonx; model_id=meta-llama/llama-3-3-70b-instruct; candidates, reason_codes, explanation and fallback flag persisted |
+| POST /api/v1/planner/decision, APPROVED | HTTP 200; final_start/end equal persisted recommendation |
+| After decision | Task remained pending; no ScheduledSlot existed |
+| POST /api/v1/engine/book with approved final_start | HTTP 201; ScheduledSlot 1 created |
+| After explicit booking | Task 1 became scheduled |
+
+Selected slot: 2026-10-08 08:00–09:00. Approval did not book automatically. Booking recomputed end and revalidated current commitments, scheduled conflicts and deadline before the atomic write.
+
+This demonstrates safe fallback and action separation. It does not claim that a post-chat nonfallback recommendation repeated the entire persisted booking flow. The original recommendation's raw parsing failure was not recorded; later controlled failures supplied the malformed-JSON diagnosis.
+
+The historical watsonx-e2e-validation-report.md retains detailed pre-chat requests/responses. Its text-generation warning and malformed-output observations describe that earlier phase.
+
+Booking currently lacks an explicit daily work-window boundary check beyond its deadline ceiling; generated candidates are constrained by the work window. The successful valid-candidate booking must not be presented as proof that every arbitrary booking input is guarded.
+
+## Automated and Live Test Evidence
+
+Recorded commands:
+```text
+docker compose up -d --build api
+docker compose exec -T api python -m pip install pytest
+docker compose exec -T -e WATSONX_API_KEY= api python -m pytest tests -q -p no:cacheprovider
+docker compose exec -T api python -m pytest tests/test_watsonx_provider.py -v -p no:cacheprovider
+```
+
+pytest installation was container-only. The isolated suite used SQLite dependency overrides, not development MySQL.
+
+- Full automated suite: **160 passed, 1 skipped, 0 failed**, 59 warnings. Credentials were disabled; this run skipped the live smoke test.
+- Separate credential-gated real smoke: **1 passed**, 3 warnings.
+- Eight mocked chat transport cases cover parameters, unchanged text delivery to PlannerAgent, response-shape errors and upstream errors.
+- Smoke asserts a nonempty string, not PlannerAgent schema validity, and does not print raw output.
+- The pre-existing time-dependent booking test can skip at other execution times.
+
+Warnings include the nullable date annotation, utcnow test helpers, Starlette/httpx and third-party model licensing. The text-generation API warning is gone.
+
+## Scope and Remaining Work
+
+Migration files: backend/app/ai/provider.py, backend/tests/test_watsonx_chat.py and this documentation. Prompt, provider interface, audit metadata, deterministic engine, routes and fallback behavior remained unchanged.
+
+No raw model output was persisted. No secrets were exposed or changed. No new agents, routes, tables or frontend features were introduced.
+
+Future scoped priorities: semantic reason-code consistency, larger reliability samples, supported Granite validation, deterministic booking boundary review and clock-dependent test cleanup. These are not part of the completed migration.
