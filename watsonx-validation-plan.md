@@ -17,7 +17,7 @@ Original ST-9 work is complete: provider response handling, credential-gated smo
 
 ## Provider Smoke Validation
 
-The credential-gated test passed separately with a real watsonx call: **1 passed**. It checks that WatsonxProvider.complete() returns a nonempty string; it does not validate PlannerAgent JSON or booking. With credentials disabled, this is the only test skipped in the latest 186-test suite. The recorded live result was not rerun during frontend implementation or this documentation update.
+The credential-gated test passed separately with a real watsonx call: **1 passed**. It checks that WatsonxProvider.complete() returns a nonempty string; it does not validate PlannerAgent JSON or booking. With credentials disabled, this is the only test skipped in the latest suite (216 passed, 1 skipped, 0 failed). The recorded live result was not rerun during frontend implementation or this documentation update.
 
 ## Text Generation → Chat Migration
 
@@ -30,13 +30,13 @@ WatsonxProvider.complete() moved from deprecated text generation to ModelInferen
 }
 ```
 
-The unchanged PlannerAgent prompt is sent as one user message. The provider extracts choices[0].message.content and returns only a string through complete(prompt) -> str. It does not parse JSON or validate candidate IDs/reason codes. Invalid transport shapes and upstream errors become ProviderError.
+At transport migration the PlannerAgent prompt was unchanged. The current two-field prompt is sent as one user message. The provider extracts choices[0].message.content and returns only a string through complete(prompt) -> str. It does not parse JSON or validate candidate IDs/reason codes. Invalid transport shapes and upstream errors become ProviderError.
 
-PlannerAgent retains json.loads, Pydantic validation, reason-code membership, reserved fallback-code rejection, candidate bounds and deterministic lookup/fallback. Provider/model audit metadata remains sourced from the injected instance. No prompt changes, retries without JSON mode, or architectural workarounds were necessary.
+At transport migration PlannerAgent retained its existing parsing and model reason-code guards. Subsequent deterministic reason-code governance replaced model-owned codes with backend derivation, as recorded below; json.loads, Pydantic validation, candidate bounds and deterministic lookup/fallback remain. Provider/model audit metadata remains sourced from the injected instance. The transport migration required no prompt changes, retries without JSON mode, or architectural workarounds were necessary.
 
 The deprecated /ml/v1/text/generation warning disappeared from the real support probe, smoke test and five-call comparison. Existing test and third-party license warnings remain.
 
-## Controlled Reliability Comparison
+## Controlled Reliability Comparison — Before Final Reason-Code Governance
 
 The same five pending test scenarios and deterministic candidate context were used before and after migration (Tasks 3–7, from_date 2026-10-08).
 
@@ -58,7 +58,7 @@ All three earlier failures were malformed JSON, not connectivity failures:
 
 All three failed json.loads with `Expecting value: line 3 column 20 (char 54)`. No post-chat fallback occurred, so there is no raw failure reason for that round.
 
-This is a small controlled sample, not a reliability guarantee or production failure-rate estimate. Structural validity is not semantic accuracy: candidate 6 received EARLIEST_SLOT, and a later candidate received MOST_BUFFER_BEFORE_DEADLINE. Existing guards validate membership, not the truth of these explanations.
+This is a small controlled sample, not a reliability guarantee or production failure-rate estimate. Structural validity is not semantic accuracy: candidate 6 received EARLIEST_SLOT, and a later candidate received MOST_BUFFER_BEFORE_DEADLINE. At that time guards validated code membership rather than factual derivation. The final governance change resolves this reason-code issue; the historical table is not the current vocabulary.
 
 The comparison called the real PlannerAgent path directly with a capture-only provider wrapper. It did not insert new audit rows or book tasks; Tasks 3–7 remained pending. Raw failure output was captured locally for diagnosis only, never in ai_recommendations. No raw output or credentials are reproduced here.
 
@@ -85,7 +85,7 @@ The historical watsonx-e2e-validation-report.md retains detailed pre-chat reques
 
 At the time of this real validation, booking lacked an explicit daily work-window guard. A subsequent approved deterministic fix now enforces the full interval within the configured start-date window and excludes nonfuture suggestions. Its isolated suite passed with 186 passed, 1 skipped, 0 failed; no real watsonx calls were rerun for that fix.
 
-## Frontend MVP Validation — Post-Chat
+## Frontend MVP Validation — Post-Chat, Before Final Reason-Code Governance
 
 This validation is distinct from the provider smoke and the five-call reliability comparison. The React/TypeScript/Vite one-page MVP used the actual backend through the Vite /api → http://localhost:8000 development proxy; backend CORS and API contracts were unchanged.
 
@@ -121,7 +121,8 @@ docker compose exec -T api python -m pytest tests/test_watsonx_provider.py -v -p
 pytest installation was container-only. The isolated suite used SQLite dependency overrides, not development MySQL.
 
 - Historical chat-migration suite: **160 passed, 1 skipped, 0 failed**, 59 warnings. Credentials were disabled; this run skipped the live smoke test.
-- Latest suite after deterministic time/window hardening: **186 passed, 1 skipped, 0 failed**, 2 warnings. Its only skip is the credential-gated smoke with credentials disabled.
+- Historical suite after deterministic time/window hardening: **186 passed, 1 skipped, 0 failed**, 2 warnings. Its only skip is the credential-gated smoke with credentials disabled.
+- Final governance suite on read-only-mounted local source: **216 passed, 1 skipped, 0 failed**, 2 warnings; credentials disabled, only live smoke skipped.
 - Separate credential-gated real smoke: **1 passed**, 3 warnings.
 - Eight mocked chat transport cases cover parameters, unchanged text delivery to PlannerAgent, response-shape errors and upstream errors.
 - Smoke asserts a nonempty string, not PlannerAgent schema validity, and does not print raw output.
@@ -135,4 +136,30 @@ Migration files: backend/app/ai/provider.py, backend/tests/test_watsonx_chat.py 
 
 No raw model output was persisted. No secrets were exposed or changed. The chat migration introduced no new agents, routes, tables or frontend features. The separately approved frontend MVP was implemented later without changing backend contracts.
 
-Future scoped priorities: semantic reason-code consistency, larger reliability samples, supported Granite validation and frontend interaction coverage. Timezone-aware scheduling and production design/deployment remain separate future work. The deterministic booking boundary and clock-dependent scheduling-test fixes were subsequently completed under separate approval; they did not modify AI behavior or form part of the chat migration.
+## Final Deterministic Reason-Code Contract and Feature Freeze
+
+The model returns only recommended_candidate_id and explanation. PlannerAgent derives reason_codes from task/candidate facts after structural and candidate-ID validation:
+
+| Code | Deterministic rule |
+|---|---|
+| HIGH_PRIORITY | task.priority == "high" |
+| MEDIUM_PRIORITY | task.priority == "medium" |
+| LOW_PRIORITY | task.priority == "low" |
+| EARLIEST_SLOT | selected candidate_id == 0 |
+| ONLY_SLOT_AVAILABLE | len(candidate_slots) == 1 |
+| DEADLINE_CLOSE | deadline exists and (deadline - selected_candidate.date).days <= 1 |
+| PROVIDER_FALLBACK | System-only fallback path |
+
+MOST_BUFFER_BEFORE_DEADLINE is removed. Extra model fields, including reason_codes, are ignored. Fallback occurs only for provider failure, malformed JSON, structurally invalid output or invalid candidate_id. Existing fallback selects candidate 0 and supplies only PROVIDER_FALLBACK. Provider transport, audit metadata, HTTP schemas and raw-output exclusion are unchanged; historical audit records are not rewritten.
+
+The 5/5 post-chat sample, separate live smoke and real recommend → decision → explicit book flow preceded final governance. They were not rerun against the final two-field contract. The sample is small and provides no reliability guarantee. The final local automated suite is **216 passed, 1 skipped, 0 failed**; the only skip is the credential-gated smoke with credentials disabled. See deterministic-reason-codes-plan.md for source-tree validation details.
+
+The current MVP is **feature-frozen**. Next priorities:
+
+1. Visual polish.
+2. Deployment.
+3. Screenshots/GIF/demo evidence.
+4. Presentation/LinkedIn.
+5. Optional real-world usage.
+
+No new backend features or Auditor Agent are planned; completed architecture decisions remain closed. Granite runtime availability, naive local-time limits, explanation accuracy, existing warnings and sample-size limits remain documented limitations rather than authorization for new development.

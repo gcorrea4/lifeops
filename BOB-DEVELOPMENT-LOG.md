@@ -26,7 +26,7 @@ The provider interface stayed complete(prompt) -> str. MockProvider supports iso
 
 The initial model-generated datetime contract was replaced with candidate_id selection. The model chooses an indexed deterministic candidate; application code resolves its start/end from the original list. This prevents model-invented datetimes from becoming recommendations.
 
-Malformed output, invalid candidate IDs/reason codes and provider errors preserve a deterministic first-candidate fallback. Empty availability cannot be converted into invented slots.
+At that stage, malformed output, invalid candidate IDs/reason codes and provider errors preserve a deterministic first-candidate fallback. Empty availability cannot be converted into invented slots.
 
 ## Planner Routes and Cleanup: ST-8
 
@@ -111,6 +111,30 @@ REJECTED was confirmed without booking; a once overnight commitment (2026-10-09,
 
 The API process initially retained code from before time/window hardening. Recommendation 2 returned elapsed candidates and was rejected without booking. Restarting the API loaded the existing guards; the successful recommendation 3 then used future candidates. This required no backend source modification.
 
-npm run build passed and npm run lint passed with no warnings. The latest backend automated state remains **186 passed, 1 skipped, 0 failed**; the only skip is the credential-gated smoke when credentials are disabled. Those backend tests were not rerun for frontend implementation. The earlier live smoke had passed separately.
+npm run build passed and npm run lint passed with no warnings. At frontend validation, the recorded backend automated state was **186 passed, 1 skipped, 0 failed**; the only skip is the credential-gated smoke when credentials are disabled. Those backend tests were not rerun for frontend implementation. The earlier live smoke had passed separately.
 
-Decision and booking remained separate in the UI. The real frontend success complements the earlier fallback E2E and small controlled 5/5 post-chat sample; it is not a reliability guarantee. Remaining work includes semantic reason-code accuracy, supported Granite validation, timezone-aware scheduling, frontend interaction coverage and production design/deployment.
+Decision and booking remained separate in the UI. The real frontend success complements the earlier fallback E2E and small controlled 5/5 post-chat sample; it is not a reliability guarantee. That phase's proposed backlog is superseded by the completed governance and feature freeze below.
+
+
+
+## Deterministic Reason-Code Governance — 2026-10-07
+
+After human approval, Bob began replacing model-owned reason codes with factual backend derivation. Its trial ended with changes already on disk in ai/schemas.py, ai/agent.py and the two planner test files. Bob had added the vocabulary, two-field prompt/schema, derivation helper and initial test updates. Its reported stale-container test result was not trusted.
+
+Codex inspected the working tree and completed only the approved scope: explicit low-priority derivation, strict integer candidate-ID validation, additional derivation/structural regression cases, and exact HTTP/audit assertions. Obsolete tests requiring fallback for model-provided reason codes were removed; extra fields are ignored instead. No provider, engine, database, HTTP contract, frontend, environment or dependency change was required.
+
+The final model contract is recommended_candidate_id + explanation only. The backend derives HIGH_PRIORITY, MEDIUM_PRIORITY or LOW_PRIORITY from task priority; EARLIEST_SLOT from candidate_id=0; ONLY_SLOT_AVAILABLE from a one-candidate list; and DEADLINE_CLOSE when a deadline exists and its date minus the selected candidate date is at most one day. PROVIDER_FALLBACK remains system-only. MOST_BUFFER_BEFORE_DEADLINE was removed. Fallback remains for provider failure, malformed JSON, structurally invalid output and invalid candidate IDs, retaining the first valid deterministic candidate and existing explanation.
+
+Validation used the actual local backend source mounted read-only, with real watsonx credentials disabled: **216 passed, 1 skipped, 0 failed**. The only skip is the credential-gated smoke. Two existing warnings remain: SQLAlchemy nullable date annotation and Starlette/httpx. git diff --check passed. The former time-dependent booking test is deterministic and runs normally.
+
+The earlier real smoke, 2/5 → 5/5 chat comparison and real human-in-the-loop frontend flow are historical evidence; they were not rerun after this final contract change. Deterministic reason codes resolve the observed code-semantic issue, but do not guarantee free-text explanation accuracy or production reliability.
+
+## Current MVP Feature Freeze
+
+ST-1 through ST-9, ST-8 cleanup, time/window hardening, frontend MVP and deterministic reason-code governance are complete. The current MVP is feature-frozen. Architecture decisions remain closed; no new backend feature or Auditor Agent is planned.
+
+1. Visual polish.
+2. Deployment.
+3. Screenshots/GIF/demo evidence.
+4. Presentation/LinkedIn.
+5. Optional real-world usage.
