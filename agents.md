@@ -29,7 +29,7 @@ Deterministic rules have priority. AI must never override hard scheduling constr
 
 Historical plans use differing stage numbering in places. Their unchecked boxes and proposed contracts are not the current specification.
 
-Recorded automated suite: **160 passed, 1 skipped, 0 failed**. Real credential-gated smoke test run separately: **1 passed**. These are recorded validation results, not a guarantee of a fresh run.
+Latest isolated automated suite after deterministic gap fixes: **186 passed, 1 skipped, 0 failed** (2 existing warnings). Real credential-gated smoke test run separately: **1 passed**. These are recorded validation results, not a guarantee of a fresh run.
 
 The frontend is still the stock scaffold, not an integrated scheduling/planner UI. No authentication or deployed production environment exists. The backend API flow is validated.
 
@@ -120,7 +120,7 @@ A candidate ending exactly at WORK_END on the deadline date is valid.
 POST /api/v1/engine/book:
 1. loads the Task and requires pending;
 2. normalizes the requested start to a naive datetime and requires a future start;
-3. computes end server-side;
+3. computes end server-side and requires the entire interval within that date's configured work window;
 4. validates the deadline ceiling;
 5. checks current FixedBlocks, including overnight occupancy;
 6. checks current ScheduledSlots;
@@ -128,9 +128,12 @@ POST /api/v1/engine/book:
 
 Do not trust a previous suggestion. The book endpoint accepts task_id/start_datetime; it does not require recommendation_id or an approval audit row. Human approval is an explicit workflow step, not a server-enforced linkage between these endpoints.
 
-Implementation limitations requiring separate scoped work:
-- Suggesting from today can include already elapsed times; booking rejects past starts.
-- Booking currently has no explicit WORK_START/WORK_END boundary check beyond its deadline ceiling. Suggestion generation does enforce the work window. Preserve the intended hard-constraint architecture without claiming this missing check exists.
+Implemented deterministic safeguards:
+- core/clock.py exposes now(), returning naive local time. Each scheduling HTTP handler captures it once and derives today from that same value.
+- suggest_slots requires explicit now and excludes starts at or before it before counting results. Existing interval generation and slot alignment remain unchanged; following days continue normally.
+- Booking requires window_start <= start < end <= window_end for the start date, rejecting out-of-hours and cross-midnight bookings with 422 before mutation.
+
+Remaining limitation:
 - Datetimes are currently naive; stripping tzinfo is not timezone conversion. Do not imply comprehensive timezone support.
 
 ## PlannerAgent Contract and Fallback
@@ -229,20 +232,20 @@ Recorded validation commands, executed in the API container:
 docker compose exec -T -e WATSONX_API_KEY= api python -m pytest tests -q -p no:cacheprovider
 docker compose exec -T api python -m pytest tests/test_watsonx_provider.py -v -p no:cacheprovider
 ```
-The first deliberately disables live credentials: 160 passed, 1 skipped, 0 failed. Its skip was the smoke test. The separate live smoke passed. The pre-existing clock-dependent booking test can also skip depending on execution time; do not automatically attribute every single skip to it.
+The latest first-command run deliberately disabled live credentials: 186 passed, 1 skipped, 0 failed, with 2 warnings. Its only skip was the smoke test. The separate live smoke passed during prior watsonx validation; it was not rerun for deterministic fixes. The former clock-dependent booking test now runs with a fixed clock and has no time-of-day skip. Engine/planner router and BookRequest time tests use fixed timestamps; pure service tests pass explicit now.
 
 Never print credentials, dump environment files, commit secrets or persist raw completions. Dependencies are currently unpinned; SDK 1.8.0 is the tested version, not a requirements pin.
 
 ## Known Technical Debt and Limits
 
-1. Pre-existing deadline booking test uses real time and can skip; scoped clock injection/freezing remains future work.
+1. Resolved: deadline booking test uses a fixed clock and isolates deadline failure from work-window failure; the time-of-day skip is removed.
 2. SQLAlchemy nullable date annotation deprecation warning in models/fixed_block.py.
-3. datetime.utcnow() deprecation warnings in existing test helpers.
+3. utcnow-based engine/planner helpers were replaced with fixed-clock timestamps. No utcnow warnings occurred in the latest Python 3.12 suite; unrelated helpers elsewhere remain outside this scope.
 4. Reason-code semantic consistency is unchecked; later candidates received EARLIEST_SLOT.
 5. Validated model is non-IBM because of Lite/Sydney Granite availability.
 6. Future Granite testing needs a supported runtime/region/deployment.
 7. Five post-chat successes are a small sample, not a guarantee.
-8. Booking work-window and same-day elapsed-candidate gaps described above.
+8. Resolved: booking work-window and same-day elapsed-candidate gaps, with boundary, cutoff and nonmutation regression tests.
 9. Existing Starlette/httpx and third-party model license warnings remain; chat removed only the text-generation deprecation warning.
 
 Do not opportunistically clean up warnings or expand architecture. Address them only when functionally necessary or through approved dedicated work.
@@ -253,8 +256,6 @@ These are candidates for scoped human review, not authorization to implement:
 - inspect reason-code semantic consistency without weakening candidate or fallback guards;
 - broaden controlled reliability evaluation while protecting credentials and raw-output privacy;
 - assess Granite on supported infrastructure;
-- review deterministic booking work-window enforcement and same-day suggestions;
-- make time-dependent tests deterministic in a dedicated cleanup;
 - plan frontend API integration separately.
 
 No Auditor Agent, new provider or new feature is part of the completed validation scope.

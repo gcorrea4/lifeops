@@ -24,7 +24,7 @@ IBM Bob has supported planning and implementation across the software developmen
 
 ST-1 through ST-9, including ST-8 cleanup, are complete. Backend CRUD, deterministic scheduling, PlannerAgent, recommendation and decision endpoints, audit persistence, and real watsonx integration are implemented. The frontend remains a scaffold; deployment is planned.
 
-Recorded automated results: **160 passed, 1 skipped, 0 failed**, with a separate successful real watsonx smoke test.
+Recorded automated results: **186 passed, 1 skipped, 0 failed**, with a separate successful real watsonx smoke test.
 
 Real IBM Cloud authentication and watsonx Runtime calls were validated using `meta-llama/llama-3-3-70b-instruct`. The provider now uses the chat API with JSON response format. A controlled five-call comparison improved from **2/5 valid structured responses and 3 fallbacks** to **5/5 valid responses and no fallbacks**. This small sample is not a reliability guarantee; explanation semantics still need attention.
 
