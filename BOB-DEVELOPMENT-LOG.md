@@ -76,9 +76,9 @@ This is a small sample, not a reliability guarantee. Valid JSON still contained 
 
 ## Validated Snapshot After Chat Migration
 
-ST-1 through ST-9 and ST-8 cleanup are complete. Recorded automated result: **160 passed, 1 skipped, 0 failed**; separate real smoke: **1 passed**. The automated run disabled credentials and skipped the live smoke. A pre-existing booking test remains clock-dependent and can skip in other runs.
+ST-1 through ST-9 and ST-8 cleanup are complete. Recorded automated result: **160 passed, 1 skipped, 0 failed**; separate real smoke: **1 passed**. The automated run disabled credentials and skipped the live smoke. At that stage, a booking test was clock-dependent; the subsequent hardening below removed its skip.
 
-The frontend remains a scaffold. Deployment, authentication, additional agents/providers and autonomous booking have not been implemented.
+At that stage the frontend was a scaffold. Deployment, authentication, additional agents/providers and autonomous booking have not been implemented.
 
 Remaining debt includes nullable date and utcnow deprecations, clock-dependent tests, reason-code semantic consistency, Granite runtime availability and the small reliability sample. Repository inspection also identified booking-window and elapsed-suggestion gaps. These were subsequently fixed under explicit approval, as recorded below.
 
@@ -93,3 +93,24 @@ A minimal core/clock.py now() helper returns naive local time. Scheduling handle
 Scheduling tests use fixed timestamps. The former deadline-booking skip is removed, with deadline behavior isolated from work-window validation. BookRequest keeps its existing temporal validation through the shared clock.
 
 Full isolated suite with WATSONX_API_KEY disabled: **186 passed, 1 skipped, 0 failed**, 2 existing warnings (SQLAlchemy nullable date and Starlette/httpx). The only skip is the credential-gated smoke test. Documentation was updated only after the suite passed. No PlannerAgent, provider, model, database schema, endpoint contract, frontend or timezone architecture changes were made.
+## Frontend MVP Planning and Implementation — 2026-10-07
+
+A bounded frontend plan was reviewed and approved before implementation: one page with Tasks, Fixed commitments and Plan a task. The human explicitly deferred Vitest/React Testing Library and approved TypeScript build, lint and manual validation instead. Codex assisted with planning, frontend implementation, validation and documentation; this phase is not attributed solely to Bob.
+
+The MVP uses React hooks, simple components, fetch and plain responsive CSS. It creates/lists tasks and commitments, supports weekly/once recurrence and overnight commitments, and displays the complete recommendation, explanation, reason codes, fallback flag and original candidates.
+
+PlannerPanel retains the full recommendation snapshot. APPROVED uses the persisted recommendation; MODIFIED selects an original candidate only; REJECTED does not book. Backend datetime strings are preserved exactly. A recorded decision leaves the task pending, and a separate Book selected slot action uses decision.final_start.
+
+The Vite /api → http://localhost:8000 proxy enabled local integration without backend CORS changes. No new frontend dependencies, backend changes, API changes, environment changes or test runner were introduced.
+
+## Real Frontend Flow Validation — 2026-10-07
+
+Recorded real flow: Task 8 → recommendation 3 → fallback_used=false → MODIFIED to original candidate 2026-10-07 14:00–14:30 → Task still pending, zero slots → explicit engine/book → ScheduledSlot 2 → Task scheduled. The UI displayed the booking confirmation and refreshed the Tasks list.
+
+REJECTED was confirmed without booking; a once overnight commitment (2026-10-09, 22:00–06:00) was created and displayed with its backend-derived overnight state. Backend 422 details were visible without clearing the form.
+
+The API process initially retained code from before time/window hardening. Recommendation 2 returned elapsed candidates and was rejected without booking. Restarting the API loaded the existing guards; the successful recommendation 3 then used future candidates. This required no backend source modification.
+
+npm run build passed and npm run lint passed with no warnings. The latest backend automated state remains **186 passed, 1 skipped, 0 failed**; the only skip is the credential-gated smoke when credentials are disabled. Those backend tests were not rerun for frontend implementation. The earlier live smoke had passed separately.
+
+Decision and booking remained separate in the UI. The real frontend success complements the earlier fallback E2E and small controlled 5/5 post-chat sample; it is not a reliability guarantee. Remaining work includes semantic reason-code accuracy, supported Granite validation, timezone-aware scheduling, frontend interaction coverage and production design/deployment.

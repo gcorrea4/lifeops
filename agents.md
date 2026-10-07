@@ -26,12 +26,14 @@ Deterministic rules have priority. AI must never override hard scheduling constr
 | ST-8 | Complete | Planner service and recommend/decision routes with audit persistence |
 | ST-8 cleanup | Complete | Candidate-ID contract, injected-provider audit metadata, planner from_date validation and regression coverage |
 | ST-9 | Complete | AI test coverage and real watsonx validation; credential-gated smoke test and chat migration validated |
+| Deterministic time/window hardening | Complete | Shared clock, future-only suggestions, daily booking window and deterministic tests |
+| Frontend MVP | Complete | Tasks, commitments, planner decisions and explicit booking in one page; build/lint and real manual flow validated |
 
 Historical plans use differing stage numbering in places. Their unchecked boxes and proposed contracts are not the current specification.
 
 Latest isolated automated suite after deterministic gap fixes: **186 passed, 1 skipped, 0 failed** (2 existing warnings). Real credential-gated smoke test run separately: **1 passed**. These are recorded validation results, not a guarantee of a fresh run.
 
-The frontend is still the stock scaffold, not an integrated scheduling/planner UI. No authentication or deployed production environment exists. The backend API flow is validated.
+The frontend MVP now integrates the validated backend flow in one page. No authentication or deployed production environment exists. Frontend build and lint passed without warnings; manual real recommendation/decision/booking validation passed. This is an MVP, not a production design.
 
 ## Approved Stack and Repository Map
 
@@ -58,7 +60,7 @@ Relevant backend directories under `backend/app/`:
 
 - The deterministic engine owns scheduling validity and remains independent from AI.
 - AI receives only deterministic candidates; it never creates availability or invents datetimes.
-- The model selects `recommended_candidate_id` only. PlannerAgent resolves datetimes from the original input candidate list.
+- AI never creates or modifies scheduling boundaries. The model selects `recommended_candidate_id` only. PlannerAgent resolves datetimes from the original input candidate list.
 - Recommend → decision → engine/book are three separate actions.
 - `/planner/decision` never creates a ScheduledSlot or mutates Task.status.
 - APPROVED ignores chosen_start/chosen_end and uses the persisted recommended slot.
@@ -72,6 +74,45 @@ Relevant backend directories under `backend/app/`:
 - Invalid provider configuration fails explicitly; it must not silently select MockProvider.
 - Pydantic handles request-local rules; merged-state domain rules belong in the application layer.
 - Derived fields are computed server-side; tests must not use development MySQL.
+
+## Frontend MVP Architecture and API Rules
+
+The one-page React + TypeScript + Vite MVP is complete:
+- App owns task/commitment lists, refresh state and selected task.
+- TasksPanel creates/lists tasks and displays title, duration, priority, deadline and status. Only pending tasks can be planned.
+- FixedBlocksPanel creates/lists weekly or once commitments. Monday=0 through Sunday=6. Overnight end times are allowed; spans_next_day is never sent and the returned overnight flag is shown.
+- PlannerPanel requests recommendations and displays the recommended slot, explanation, reason_codes, fallback_used and all original candidates.
+- api/types.ts mirrors HTTP request/response types; api/client.ts uses fetch only, with backend error details and no automatic POST retries.
+- utils/format.ts formats dates for display only. Styling is plain responsive CSS with accessible labels, loading states and visible errors.
+
+No router, state-management library, UI framework, charts, authentication or new frontend dependencies were added.
+
+Vite development proxy: /api → http://localhost:8000. The frontend uses relative API URLs; no backend CORS changes were needed. This is a local development setup, not a production hosting solution.
+
+| Method | Endpoint | Frontend action |
+|---|---|---|
+| GET / POST | /api/v1/tasks/ | List / create tasks |
+| GET / POST | /api/v1/blocks/ | List / create commitments |
+| POST | /api/v1/planner/recommend | Obtain a complete recommendation snapshot |
+| POST | /api/v1/planner/decision | Record APPROVED, MODIFIED or REJECTED |
+| POST | /api/v1/engine/book | Explicit booking after a recorded decision |
+
+Keep these interaction rules:
+- Retain the complete RecommendResponse. MODIFIED selects only from that exact candidate_slots array; never regenerate it with engine/suggest.
+- APPROVED sends recommendation_id/action only; the backend uses the persisted recommended slot.
+- MODIFIED sends the selected original start/end strings. REJECTED sends recommendation_id/action and never exposes a Book button.
+- After APPROVED/MODIFIED succeeds, show “Decision recorded. Task is still pending.” Book is a separate explicit click.
+- Book sends task_id from the recommendation and start_datetime from decision.final_start. Confirmation displays the returned ScheduledSlot, then refreshes Tasks.
+- Preserve original backend datetime strings in payloads. Never use toISOString() or convert naive datetimes to UTC; formatting is display-only.
+- Preserve recommendation/decision state on failed booking; show 422/404/409 backend messages.
+- Busy flags and submission refs block repeated clicks. Successful decisions disable further decisions on that snapshot.
+- App keys PlannerPanel by selected task; unmounted panels ignore stale responses. Booking completion still refreshes Tasks after a task switch.
+- A page reload discards the local planner flow. There is no recommendation-recovery endpoint or browser persistence.
+- Do not put watsonx credentials in browser configuration or frontend bundles.
+
+Validated frontend flow: Task 8 → recommendation 3 (fallback_used=false) → MODIFIED to an original candidate → pending with zero slots → explicit booking → ScheduledSlot 2 → scheduled. Selected slot: 2026-10-07 14:00–14:30, preserved as backend naive datetime strings. REJECTED and once overnight creation were also confirmed.
+
+Validation uses npm run build, npm run lint and manual end-to-end checks. Both commands passed with no warnings. There is no automated frontend interaction test runner; adding one requires separate scope.
 
 ## Domain Rules
 
@@ -213,7 +254,7 @@ The available Lite/Sydney runtime did not support the planned Granite model. A n
 
 The deprecated text-generation transport was replaced by chat with accepted JSON response format. The /ml/v1/text/generation deprecation warning disappeared. Controlled reliability: before 2/5 valid, 3/5 malformed-JSON fallbacks; after 5/5 valid, 0/5 fallbacks. This small sample does not establish production reliability.
 
-The real persisted end-to-end flow was validated using the earlier fallback recommendation: approval left Task pending and no slot existed until explicit engine/book created it and set scheduled. The later five-call chat comparison did not create bookings or audit rows.
+The real persisted end-to-end flow was validated using the earlier fallback recommendation: approval left Task pending and no slot existed until explicit engine/book created it and set scheduled. The later five-call chat comparison did not create bookings or audit rows. A subsequent frontend-backed real chat flow did persist recommendation 3 without fallback, record MODIFIED, and create ScheduledSlot 2 only after explicit booking.
 
 ## Testing Rules
 
@@ -247,6 +288,8 @@ Never print credentials, dump environment files, commit secrets or persist raw c
 7. Five post-chat successes are a small sample, not a guarantee.
 8. Resolved: booking work-window and same-day elapsed-candidate gaps, with boundary, cutoff and nonmutation regression tests.
 9. Existing Starlette/httpx and third-party model license warnings remain; chat removed only the text-generation deprecation warning.
+10. Timezone-aware scheduling is not implemented: naive local datetimes are intentionally preserved end-to-end.
+11. Frontend has no automated interaction test runner yet and remains an MVP rather than a production design.
 
 Do not opportunistically clean up warnings or expand architecture. Address them only when functionally necessary or through approved dedicated work.
 
@@ -256,7 +299,9 @@ These are candidates for scoped human review, not authorization to implement:
 - inspect reason-code semantic consistency without weakening candidate or fallback guards;
 - broaden controlled reliability evaluation while protecting credentials and raw-output privacy;
 - assess Granite on supported infrastructure;
-- plan frontend API integration separately.
+- review frontend interaction tests in a separately approved task, without adding dependencies automatically;
+- evaluate timezone-aware scheduling only as a separate architecture decision;
+- review production UX/deployment separately; the frontend API MVP is already complete.
 
 No Auditor Agent, new provider or new feature is part of the completed validation scope.
 
