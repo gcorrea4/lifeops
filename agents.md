@@ -1,6 +1,6 @@
 # LifeOps Project Context
 
-Operational context for IBM Bob, Codex, Claude Code, and future coding agents. Updated 2026-10-07. Read this document and the relevant current implementation before changing code.
+Operational context for IBM Bob, Codex, Claude Code, and future coding agents. Updated 2026-10-10. Read this document and the relevant current implementation before changing code.
 
 ## Project Goal
 
@@ -29,12 +29,13 @@ Deterministic rules have priority. AI must never override hard scheduling constr
 | Deterministic time/window hardening | Complete | Shared clock, future-only suggestions, daily booking window and deterministic tests |
 | Deterministic reason-code governance | Complete | Two-field model output; backend-derived reason codes; candidate and fallback guards preserved |
 | Frontend MVP | Complete | Tasks, commitments, planner decisions and explicit booking in one page; build/lint and real manual flow validated |
+| Visual polish | Complete | Presentation-only CSS polish (App.css, index.css); build and lint passed without warnings; no component, logic, contract or backend change |
 
 Historical plans use differing stage numbering in places. Their unchecked boxes and proposed contracts are not the current specification.
 
 Latest isolated automated suite after deterministic reason-code governance: **216 passed, 1 skipped, 0 failed** (2 existing warnings). The only skip is the credential-gated watsonx smoke with credentials disabled. This run used the actual local source mounted read-only, not a stale container copy. The separate real smoke previously passed; it was not rerun for this change.
 
-The current MVP is **feature-frozen**. Completed architecture decisions remain closed; the priorities below concern presentation, deployment and usage.
+The current MVP is **feature-frozen**. Completed architecture decisions remain closed; the priorities below concern evidence, validation, deployment and presentation.
 
 The frontend MVP now integrates the validated backend flow in one page. No authentication or deployed production environment exists. Frontend build and lint passed without warnings; manual real recommendation/decision/booking validation passed. This is an MVP, not a production design.
 
@@ -294,9 +295,11 @@ Do not opportunistically clean up warnings or expand architecture. Address them 
 
 ## Current Next Priorities
 
-1. Visual polish.
-2. Deployment.
-3. Screenshots/GIF/demo evidence.
+Visual polish is complete and is no longer a pending priority.
+
+1. Repeatable demo and evidence capture (screenshots/GIF).
+2. Final real watsonx revalidation on the two-field contract (requires explicit authorization for live calls).
+3. Deployment planning.
 4. Presentation/LinkedIn.
 5. Optional real-world usage.
 

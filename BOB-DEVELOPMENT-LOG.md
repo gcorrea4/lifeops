@@ -1,6 +1,6 @@
 # LifeOps Development Log
 
-This chronological record describes the development decisions and validations leading to the current state. Early milestones are ordered by development phase rather than assigned unverified dates. Latest validation: 2026-10-07.
+This chronological record describes the development decisions and validations leading to the current state. Early milestones are ordered by development phase rather than assigned unverified dates. Latest backend validation: 2026-10-07; latest documentation update: 2026-10-10.
 
 ## Planning and Human Review
 
@@ -133,8 +133,20 @@ The earlier real smoke, 2/5 → 5/5 chat comparison and real human-in-the-loop f
 
 ST-1 through ST-9, ST-8 cleanup, time/window hardening, frontend MVP and deterministic reason-code governance are complete. The current MVP is feature-frozen. Architecture decisions remain closed; no new backend feature or Auditor Agent is planned.
 
-1. Visual polish.
-2. Deployment.
-3. Screenshots/GIF/demo evidence.
+## Visual Polish — Completed
+
+Presentation-only CSS polish was completed after the feature freeze (commit 2d2b9eb), touching only frontend App.css and index.css: typography, spacing, panels, forms, status badges, selection, messages, empty states, focus and responsiveness. No backend, React component, API contract, logic, environment or dependency change. Frontend build and lint passed without warnings.
+
+## Current Next Priorities (updated 2026-10-10)
+
+Visual polish is complete and no longer pending.
+
+1. Repeatable demo and evidence capture (screenshots/GIF).
+2. Final real watsonx revalidation on the two-field contract (requires explicit authorization for live calls).
+3. Deployment planning.
 4. Presentation/LinkedIn.
 5. Optional real-world usage.
+
+## Repository Hygiene — 2026-10-10
+
+Tracked Python bytecode (__pycache__/*.pyc) was removed from version control and Python cache patterns were added to .gitignore. No source, test, environment, dependency or Docker file changed.

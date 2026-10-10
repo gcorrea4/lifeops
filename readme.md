@@ -30,6 +30,6 @@ Real IBM Cloud authentication and watsonx Runtime calls were validated using `me
 
 Real end-to-end validation covered the earlier backend fallback flow and a later frontend flow with a structured watsonx response: modify an original candidate, record the decision while the task remains pending, then explicitly book and transition to scheduled. Rejection without booking and overnight commitment creation were also confirmed. IBM Granite remains a future validation target because the available Lite/Sydney runtime did not support the planned model.
 
-The current MVP is **feature-frozen**. Next priorities are visual polish, deployment, screenshots/GIF/demo evidence, presentation/LinkedIn, and optional real-world usage. No new backend features are planned within this freeze.
+The current MVP is **feature-frozen**. Visual polish is complete. Next priorities are repeatable demo/evidence capture (screenshots/GIF), a final real watsonx revalidation on the two-field contract, deployment planning, presentation/LinkedIn, and optional real-world usage. No new backend features are planned within this freeze.
 
 See [agent context](agents.md), [watsonx validation record](watsonx-validation-plan.md), and [development log](BOB-DEVELOPMENT-LOG.md) for details.
