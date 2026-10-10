@@ -152,6 +152,8 @@ The model returns only recommended_candidate_id and explanation. PlannerAgent de
 
 MOST_BUFFER_BEFORE_DEADLINE is removed. Extra model fields, including reason_codes, are ignored. Fallback occurs only for provider failure, malformed JSON, structurally invalid output or invalid candidate_id. Existing fallback selects candidate 0 and supplies only PROVIDER_FALLBACK. Provider transport, audit metadata, HTTP schemas and raw-output exclusion are unchanged; historical audit records are not rewritten.
 
+Update 2026-10-10: the smoke was re-run and passed (1 passed), and a 10-scenario synthetic PlannerAgent sample on the final two-field contract returned 10/10 valid responses with 0 fallbacks and correctly derived reason codes (no database, audit rows or bookings involved). A persisted recommend → decision → book flow on the final contract is still pending. The paragraph below is the historical statement written before that revalidation.
+
 The 5/5 post-chat sample, separate live smoke and real recommend → decision → explicit book flow preceded final governance. They were not rerun against the final two-field contract. The sample is small and provides no reliability guarantee. The final local automated suite is **216 passed, 1 skipped, 0 failed**; the only skip is the credential-gated smoke with credentials disabled. See deterministic-reason-codes-plan.md for source-tree validation details.
 
 The current MVP is **feature-frozen**. Next priorities:

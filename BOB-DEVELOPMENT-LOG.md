@@ -133,6 +133,12 @@ The earlier real smoke, 2/5 → 5/5 chat comparison and real human-in-the-loop f
 
 ST-1 through ST-9, ST-8 cleanup, time/window hardening, frontend MVP and deterministic reason-code governance are complete. The current MVP is feature-frozen. Architecture decisions remain closed; no new backend feature or Auditor Agent is planned.
 
+## Final-Contract Real watsonx Revalidation — 2026-10-10
+
+With explicit user authorization, the real provider (watsonx, meta-llama/llama-3-3-70b-instruct, au-syd) was exercised against the final two-field contract. The credential-gated smoke passed (1 passed). A 10-scenario PlannerAgent sample used synthetic AgentInput directly through WatsonxProvider and PlannerAgent: no database, no audit rows, no bookings, no raw output persisted. Scenarios covered high/medium/low priority, with and without deadlines, one-candidate and multi-candidate lists.
+
+Result: 10/10 valid structured responses, 0 fallbacks, no extra model fields. Reason codes were backend-derived and matched the documented rules in every case (including DEADLINE_CLOSE on a deadline-day and day-before candidate, ONLY_SLOT_AVAILABLE for a single candidate, and no deadline code for a distant deadline). The model chose candidate 0 in 6 of 10 scenarios. Explanations were short and sometimes loosely worded, which is the known free-text limit. The sample is small and synthetic; it does not prove production reliability, and a persisted recommend → decision → book flow on the final contract remains to be captured during the demo. Backend suite re-confirmed locally at 216 passed, 1 skipped, 0 failed before the live calls.
+
 ## Visual Polish — Completed
 
 Presentation-only CSS polish was completed after the feature freeze (commit 2d2b9eb), touching only frontend App.css and index.css: typography, spacing, panels, forms, status badges, selection, messages, empty states, focus and responsiveness. No backend, React component, API contract, logic, environment or dependency change. Frontend build and lint passed without warnings.
@@ -142,7 +148,7 @@ Presentation-only CSS polish was completed after the feature freeze (commit 2d2b
 Visual polish is complete and no longer pending.
 
 1. Repeatable demo and evidence capture (screenshots/GIF).
-2. Final real watsonx revalidation on the two-field contract (requires explicit authorization for live calls).
+2. Final real watsonx revalidation on the two-field contract: smoke and 10-scenario sample done 2026-10-10; a persisted end-to-end flow is still to be captured with the demo (live calls need explicit authorization).
 3. Deployment planning.
 4. Presentation/LinkedIn.
 5. Optional real-world usage.

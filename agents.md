@@ -255,7 +255,9 @@ Real IBM Cloud authentication, watsonx project/Runtime and smoke test are valida
 
 The available Lite/Sydney runtime did not support the planned Granite model. A non-IBM model is currently used through IBM watsonx. Future Granite validation may require a supported region/runtime/deployment; do not silently change provider or force broad workarounds.
 
-The deprecated text-generation transport was replaced by chat with accepted JSON response format. The /ml/v1/text/generation deprecation warning disappeared. Controlled reliability: before 2/5 valid, 3/5 malformed-JSON fallbacks; after 5/5 valid, 0/5 fallbacks. This historical comparison preceded deterministic reason-code governance and does not establish production reliability. No new live five-call evaluation was run for the final two-field contract.
+The deprecated text-generation transport was replaced by chat with accepted JSON response format. The /ml/v1/text/generation deprecation warning disappeared. Controlled reliability: before 2/5 valid, 3/5 malformed-JSON fallbacks; after 5/5 valid, 0/5 fallbacks. This historical comparison preceded deterministic reason-code governance and does not establish production reliability. No live evaluation was run for the final two-field contract at the time of that comparison.
+
+Final-contract revalidation (2026-10-10, real watsonx, meta-llama/llama-3-3-70b-instruct, au-syd): the credential-gated smoke passed (1 passed), and a 10-scenario PlannerAgent sample using synthetic AgentInput (no database, no audit rows, no bookings) returned 10/10 valid structured responses, 0 fallbacks, no extra fields, with backend-derived reason codes matching the documented rules in every case. This is a small synthetic sample, not a production reliability guarantee; a full persisted recommend → decision → book flow on the final contract has not yet been re-run. Free-text explanations are terse and can be loosely worded.
 
 The real persisted end-to-end flow was validated using the earlier fallback recommendation: approval left Task pending and no slot existed until explicit engine/book created it and set scheduled. The later five-call chat comparison did not create bookings or audit rows. A subsequent frontend-backed real chat flow did persist recommendation 3 without fallback, record MODIFIED, and create ScheduledSlot 2 only after explicit booking.
 
@@ -298,7 +300,7 @@ Do not opportunistically clean up warnings or expand architecture. Address them 
 Visual polish is complete and is no longer a pending priority.
 
 1. Repeatable demo and evidence capture (screenshots/GIF).
-2. Final real watsonx revalidation on the two-field contract (requires explicit authorization for live calls).
+2. Final real watsonx revalidation on the two-field contract: DONE 2026-10-10 for smoke + 10-scenario PlannerAgent sample (see Provider Rules). Remaining: capture a persisted end-to-end flow during the demo (live calls need explicit authorization).
 3. Deployment planning.
 4. Presentation/LinkedIn.
 5. Optional real-world usage.
