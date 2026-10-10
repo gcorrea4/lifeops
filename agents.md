@@ -259,6 +259,8 @@ The deprecated text-generation transport was replaced by chat with accepted JSON
 
 Final-contract revalidation (2026-10-10, real watsonx, meta-llama/llama-3-3-70b-instruct, au-syd): the credential-gated smoke passed (1 passed), and a 10-scenario PlannerAgent sample using synthetic AgentInput (no database, no audit rows, no bookings) returned 10/10 valid structured responses, 0 fallbacks, no extra fields, with backend-derived reason codes matching the documented rules in every case. This is a small synthetic sample, not a production reliability guarantee; a full persisted recommend → decision → book flow on the final contract has not yet been re-run. Free-text explanations are terse and can be loosely worded.
 
+Persisted end-to-end demo validation (2026-10-10, development MySQL, DEMO-prefixed records; see demo-validation-report.md): FixedBlocks 3 and 4 → Task 9 → POST /planner/recommend 201 (fallback_used=false, provider watsonx, meta-llama/llama-3-3-70b-instruct, reason_codes HIGH_PRIORITY/EARLIEST_SLOT/DEADLINE_CLOSE) → MODIFIED to original candidate 12:00–13:00 (task still pending, no slot) → explicit POST /engine/book 201 → ScheduledSlot 3, task scheduled. Operational notes: the API container image was stale (pre-governance) and had to be rebuilt (`docker compose up -d --build api`) — verify container code hashes before any demo; the container clock is UTC while the host is UTC-3, and the UI sends no from_date, so UI captures need commitments inside the window the container considers "today" onward.
+
 The real persisted end-to-end flow was validated using the earlier fallback recommendation: approval left Task pending and no slot existed until explicit engine/book created it and set scheduled. The later five-call chat comparison did not create bookings or audit rows. A subsequent frontend-backed real chat flow did persist recommendation 3 without fallback, record MODIFIED, and create ScheduledSlot 2 only after explicit booking.
 
 ## Testing Rules
@@ -299,7 +301,7 @@ Do not opportunistically clean up warnings or expand architecture. Address them 
 
 Visual polish is complete and is no longer a pending priority.
 
-1. Repeatable demo and evidence capture (screenshots/GIF).
+1. Repeatable demo and evidence capture: API-level persisted flow validated 2026-10-10 (demo-validation-report.md has the checklist and GIF sequence); UI screenshots/GIF still to be captured.
 2. Final real watsonx revalidation on the two-field contract: DONE 2026-10-10 for smoke + 10-scenario PlannerAgent sample (see Provider Rules). Remaining: capture a persisted end-to-end flow during the demo (live calls need explicit authorization).
 3. Deployment planning.
 4. Presentation/LinkedIn.

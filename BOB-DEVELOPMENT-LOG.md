@@ -139,6 +139,12 @@ With explicit user authorization, the real provider (watsonx, meta-llama/llama-3
 
 Result: 10/10 valid structured responses, 0 fallbacks, no extra model fields. Reason codes were backend-derived and matched the documented rules in every case (including DEADLINE_CLOSE on a deadline-day and day-before candidate, ONLY_SLOT_AVAILABLE for a single candidate, and no deadline code for a distant deadline). The model chose candidate 0 in 6 of 10 scenarios. Explanations were short and sometimes loosely worded, which is the known free-text limit. The sample is small and synthetic; it does not prove production reliability, and a persisted recommend → decision → book flow on the final contract remains to be captured during the demo. Backend suite re-confirmed locally at 216 passed, 1 skipped, 0 failed before the live calls.
 
+## Persisted Demo Validation on the Final Contract — 2026-10-10
+
+With explicit authorization to write DEMO data to the development MySQL, the full persisted flow was run against real watsonx (meta-llama/llama-3-3-70b-instruct, au-syd). Preflight found the running API container was stale (image from 2026-10-07 with the pre-governance contract); only the api service was rebuilt and its files verified identical to local source before the run. No code, env or Docker file was changed.
+
+Records: FixedBlocks 3 and 4, Task 9, AIRecommendation 5, ScheduledSlot 3. Flow: recommend 201 with fallback_used=false and backend-derived HIGH_PRIORITY, EARLIEST_SLOT, DEADLINE_CLOSE; human MODIFIED to original candidate 12:00–13:00; after the decision the task was still pending with no new slot; explicit book 201 created the slot and the task became scheduled; MySQL confirmed provider watsonx, the model id, the codes, user_action MODIFIED and matching final slot. Observed caveats: container clock is UTC (host UTC-3), the UI sends no from_date, and the UI path was not exercised in this run. Details, screenshot checklist and GIF sequence are in demo-validation-report.md.
+
 ## Visual Polish — Completed
 
 Presentation-only CSS polish was completed after the feature freeze (commit 2d2b9eb), touching only frontend App.css and index.css: typography, spacing, panels, forms, status badges, selection, messages, empty states, focus and responsiveness. No backend, React component, API contract, logic, environment or dependency change. Frontend build and lint passed without warnings.
@@ -147,7 +153,7 @@ Presentation-only CSS polish was completed after the feature freeze (commit 2d2b
 
 Visual polish is complete and no longer pending.
 
-1. Repeatable demo and evidence capture (screenshots/GIF).
+1. Repeatable demo and evidence capture: persisted API-level flow validated 2026-10-10; UI screenshots/GIF still to be captured (checklist in demo-validation-report.md).
 2. Final real watsonx revalidation on the two-field contract: smoke and 10-scenario sample done 2026-10-10; a persisted end-to-end flow is still to be captured with the demo (live calls need explicit authorization).
 3. Deployment planning.
 4. Presentation/LinkedIn.
