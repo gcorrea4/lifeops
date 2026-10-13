@@ -2,6 +2,7 @@ import type {
   Task, TaskCreate, FixedBlock, FixedBlockCreate, RecommendRequest,
   RecommendResponse, DecisionRequest, DecisionResponse, BookRequest, ScheduledSlot,
 } from './types'
+import type { Messages } from '../i18n/messages'
 
 export class ApiError extends Error {
   readonly status: number
@@ -40,9 +41,11 @@ async function request<T>(path: string, body?: unknown, signal?: AbortSignal): P
   return response.json() as Promise<T>
 }
 
-export function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? `HTTP ${error.status}: ${error.message}`
-    : 'Connection interrupted. Refresh the lists to check the outcome before submitting again.'
+// Display text only: known backend details are translated by exact match; unknown ones are shown as received.
+export function errorMessage(error: unknown, t: Pick<Messages, 'connectionError' | 'backendErrors'>): string {
+  return error instanceof ApiError
+    ? `HTTP ${error.status}: ${t.backendErrors[error.message] ?? error.message}`
+    : t.connectionError
 }
 
 export const api = {

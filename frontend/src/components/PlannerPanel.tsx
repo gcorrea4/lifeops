@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, errorMessage } from '../api/client'
 import type { DecisionRequest, DecisionResponse, RecommendResponse, ScheduledSlot, Task, UserAction } from '../api/types'
+import { useI18n } from '../i18n/context'
 import { formatSlot, formatDatetime } from '../utils/format'
 
 type PlannerState =
@@ -17,6 +18,7 @@ interface Props {
   onRefreshTasks: () => Promise<void>
 }
 export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefreshTasks }: Props) {
+  const { t } = useI18n()
   const [state, setState] = useState<PlannerState>({ phase: 'idle' })
   const [candidateIndex, setCandidateIndex] = useState<number | null>(null)
   const [busy, setBusy] = useState<'decision' | 'booking' | null>(null)
@@ -40,7 +42,7 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
       const result = await api.recommend({ task_id: task.id })
       if (mounted.current) setState({ phase: 'review', recommendation: result })
     } catch (error) {
-      if (mounted.current) { setError(errorMessage(error)); setState({ phase: 'idle' }) }
+      if (mounted.current) { setError(errorMessage(error, t)); setState({ phase: 'idle' }) }
     } finally { submitting.current = false }
   }
 
@@ -58,7 +60,7 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
       const decision = await api.decision(payload)
       if (mounted.current) setState({ phase: 'decided', recommendation: snapshot, decision })
     } catch (error) {
-      if (mounted.current) setError(errorMessage(error))
+      if (mounted.current) setError(errorMessage(error, t))
     } finally {
       submitting.current = false
       if (mounted.current) setBusy(null)
@@ -76,7 +78,7 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
       // Refresh even if the user selected another task while the booking was in flight.
       await onRefreshTasks()
     } catch (error) {
-      if (mounted.current) setError(errorMessage(error))
+      if (mounted.current) setError(errorMessage(error, t))
     } finally {
       submitting.current = false
       if (mounted.current) setBusy(null)
@@ -85,78 +87,78 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
 
   return (
     <section id="planner" className="panel planner" aria-labelledby="planner-title">
-      <div className="section-heading"><div><span className="eyebrow">REVIEW → DECIDE → BOOK</span>
-        <h2 id="planner-title">Plan a task</h2></div></div>
+      <div className="section-heading"><div><span className="eyebrow">{t.plannerEyebrow}</span>
+        <h2 id="planner-title">{t.planTask}</h2></div></div>
       <div className="planner-start">
-        <div><label htmlFor="planner-task">Pending task</label>
+        <div><label htmlFor="planner-task">{t.pendingTask}</label>
           <select id="planner-task" value={selectedTaskId ?? ''}
             onChange={(event) => onSelect(event.target.value ? Number(event.target.value) : null)}>
-            <option value="">Select a task</option>
+            <option value="">{t.selectTask}</option>
             {pending.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-            {task && task.status !== 'pending' && <option value={task.id}>{task.title} ({task.status})</option>}
+            {task && task.status !== 'pending' && <option value={task.id}>{task.title} ({t.status[task.status] ?? task.status})</option>}
           </select>
         </div>
         <button className="primary" type="button"
           disabled={!task || task.status !== 'pending' || loading}
           onClick={() => void recommend()}>
-          {state.phase === 'recommending' ? 'Getting recommendation…'
-            : state.phase === 'idle' ? 'Get recommendation' : 'Get new recommendation'}
+          {state.phase === 'recommending' ? t.gettingRecommendation
+            : state.phase === 'idle' ? t.getRecommendation : t.getNewRecommendation}
         </button>
       </div>
-      {!pending.length && !task && <p className="muted">Create a pending task to start planning.</p>}
-      {state.phase === 'recommending' && <p role="status">Checking valid slots and requesting a recommendation…</p>}
+      {!pending.length && !task && <p className="muted">{t.createPendingHint}</p>}
+      {state.phase === 'recommending' && <p role="status">{t.checking}</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {recommendation && <>
         <div className="recommendation">
-          <div className="section-heading"><h3>Recommended slot</h3>
-            <span className="muted">Recommendation #{recommendation.recommendation_id}</span></div>
+          <div className="section-heading"><h3>{t.recommendedSlot}</h3>
+            <span className="muted">{t.recommendationNumber(recommendation.recommendation_id)}</span></div>
           <p className="slot-heading">{formatSlot(recommendation.recommended_slot)}</p>
           <p>{recommendation.explanation}</p>
           <div className="badges">{recommendation.reason_codes.map((code) =>
-            <span className="badge" key={code}>{code}</span>)}</div>
+            <span className="badge" key={code} title={t.reasonCodes[code]}>{code}</span>)}</div>
           <p className={recommendation.fallback_used ? 'fallback' : 'muted'}>
-            Fallback used: {recommendation.fallback_used ? 'Yes — deterministic candidate selected.' : 'No'}
+            {t.fallbackUsed}: {recommendation.fallback_used ? t.fallbackYes : t.fallbackNo}
           </p>
         </div>
         <fieldset className="candidates" disabled={state.phase !== 'review' || loading}>
-          <legend>Original candidate slots</legend>
-          <p className="muted">Choose a candidate below to modify the recommendation.</p>
+          <legend>{t.candidates}</legend>
+          <p className="muted">{t.chooseCandidate}</p>
           {recommendation.candidate_slots.map((candidate, index) => <label className="candidate" key={index}>
             <input type="radio" name="candidate" value={index} checked={candidateIndex === index}
               onChange={() => setCandidateIndex(index)} />
             <span>{formatSlot(candidate)}</span>
             {candidate.start_datetime === recommendation.recommended_slot.start_datetime
               && candidate.end_datetime === recommendation.recommended_slot.end_datetime
-              && <span className="badge">Recommended</span>}
+              && <span className="badge">{t.recommendedBadge}</span>}
           </label>)}
         </fieldset>
         {state.phase === 'review' && <div className="actions">
           <button type="button" className="primary" disabled={loading} onClick={() => void decide('APPROVED')}>
-            Approve recommended slot</button>
+            {t.approve}</button>
           <button type="button" disabled={loading || candidateIndex === null} onClick={() => void decide('MODIFIED')}>
-            Modify to selected candidate</button>
-          <button type="button" className="quiet" disabled={loading} onClick={() => void decide('REJECTED')}>Reject</button>
-          {busy === 'decision' && <span role="status">Recording decision…</span>}
+            {t.modify}</button>
+          <button type="button" className="quiet" disabled={loading} onClick={() => void decide('REJECTED')}>{t.reject}</button>
+          {busy === 'decision' && <span role="status">{t.recordingDecision}</span>}
         </div>}
       </>}
       {state.phase === 'decided' && <div className="decision" role="status">
         {state.decision.action === 'REJECTED'
-          ? <p>Recommendation rejected. Task is still pending. Nothing was booked.</p>
+          ? <p>{t.rejectedMessage}</p>
           : <>
-            <p><strong>Decision recorded. Task is still pending.</strong></p>
+            <p><strong>{t.decisionRecorded}</strong></p>
             {state.decision.final_start && state.decision.final_end && <p>
-              Selected slot: {formatSlot({ start_datetime: state.decision.final_start, end_datetime: state.decision.final_end })}
+              {t.selectedSlot}: {formatSlot({ start_datetime: state.decision.final_start, end_datetime: state.decision.final_end })}
             </p>}
-            <p className="muted">Booking is a separate action and rechecks current availability.</p>
+            <p className="muted">{t.bookingSeparate}</p>
             <button className="primary" type="button" disabled={loading || !state.decision.final_start || !state.decision.final_end}
-              onClick={() => void book()}>{busy === 'booking' ? 'Booking…' : 'Book selected slot'}</button>
+              onClick={() => void book()}>{busy === 'booking' ? t.booking : t.book}</button>
           </>}
       </div>}
       {state.phase === 'booked' && <div className="decision success" role="status">
-        <h3>Booking confirmed</h3>
-        <p>ScheduledSlot #{state.slot.id} · Task #{state.slot.task_id}</p>
+        <h3>{t.bookingConfirmed}</h3>
+        <p>{t.slotLine(state.slot.id, state.slot.task_id)}</p>
         <p>{formatDatetime(state.slot.start_datetime)} – {state.slot.end_datetime.slice(11, 16)}</p>
-        <p>Task is now scheduled.</p>
+        <p>{t.taskNowScheduled}</p>
       </div>}
     </section>
   )

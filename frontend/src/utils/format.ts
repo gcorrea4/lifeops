@@ -1,7 +1,6 @@
 // Backend datetimes are naive local strings. Formatting never changes payload values.
-export const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return 'No deadline'
+export function formatDate(value: string | null | undefined, empty = ''): string {
+  if (!value) return empty
   const [year, month, day] = value.split('-')
   return `${day}/${month}/${year}`
 }
