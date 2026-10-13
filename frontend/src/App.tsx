@@ -138,6 +138,7 @@ function App() {
       <div id="copyright">
         <ul>
           <li>&copy; LifeOps</li>
+          <li>{t.madeBy}</li>
         </ul>
       </div>
     </div>
