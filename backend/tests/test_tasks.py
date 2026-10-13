@@ -200,3 +200,43 @@ def test_delete_task(client):
 def test_delete_task_not_found(client):
     response = client.delete("/api/v1/tasks/99999")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/tasks/{id} with dependent rows (regression: used to return 500)
+# ---------------------------------------------------------------------------
+
+def test_delete_task_with_slot_and_recommendation_cascades(client, db_session):
+    from datetime import datetime
+
+    from app.models.ai_recommendation import AIRecommendation
+    from app.models.enums import Priority, TaskStatus
+    from app.models.scheduled_slot import ScheduledSlot
+    from app.models.task import Task
+
+    task = Task(
+        user_id=1, title="Com slot", duration_minutes=60,
+        priority=Priority.medium, status=TaskStatus.scheduled,
+    )
+    db_session.add(task)
+    db_session.commit()
+    task_id = task.id
+    db_session.add(ScheduledSlot(
+        task_id=task_id, user_id=1,
+        start_datetime=datetime(2026, 10, 8, 9, 0),
+        end_datetime=datetime(2026, 10, 8, 10, 0),
+    ))
+    db_session.add(AIRecommendation(
+        task_id=task_id, user_id=1, provider="mock", model_id="mock",
+        candidate_slots_json="[]",
+    ))
+    db_session.commit()
+    db_session.expire_all()
+
+    response = client.delete(f"/api/v1/tasks/{task_id}")
+    assert response.status_code == 204
+
+    db_session.expire_all()
+    assert db_session.query(Task).filter_by(id=task_id).count() == 0
+    assert db_session.query(ScheduledSlot).filter_by(task_id=task_id).count() == 0
+    assert db_session.query(AIRecommendation).filter_by(task_id=task_id).count() == 0

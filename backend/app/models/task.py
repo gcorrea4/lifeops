@@ -23,9 +23,10 @@ class Task(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
-    # Relationship: a task has at most one scheduled slot (enforced by UNIQUE on task_id)
+    # Relationship: a task has at most one scheduled slot (enforced by UNIQUE on task_id).
+    # Deleting the task deletes its slot; without cascade the ORM would try to NULL slot.task_id.
     scheduled_slot: Mapped["ScheduledSlot"] = relationship(  # noqa: F821
-        "ScheduledSlot", back_populates="task", uselist=False
+        "ScheduledSlot", back_populates="task", uselist=False, cascade="all, delete-orphan"
     )
 
     __table_args__ = (

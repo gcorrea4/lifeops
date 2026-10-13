@@ -81,6 +81,9 @@ def _truncate_all(db):
     db.execute(text("PRAGMA foreign_keys=OFF"))
     for table in reversed(Base.metadata.sorted_tables):
         db.execute(table.delete())
+    db.commit()
+    # PRAGMA foreign_keys is a no-op inside a transaction, so re-enable only after commit;
+    # otherwise enforcement stays OFF on the shared connection for every later test.
     db.execute(text("PRAGMA foreign_keys=ON"))
     db.commit()
 
