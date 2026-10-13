@@ -33,7 +33,7 @@ Deterministic rules have priority. AI must never override hard scheduling constr
 
 Historical plans use differing stage numbering in places. Their unchecked boxes and proposed contracts are not the current specification.
 
-Latest isolated automated suite after deterministic reason-code governance: **216 passed, 1 skipped, 0 failed** (2 existing warnings). The only skip is the credential-gated watsonx smoke with credentials disabled. This run used the actual local source mounted read-only, not a stale container copy. The separate real smoke previously passed; it was not rerun for this change.
+Latest isolated automated suite after deterministic reason-code governance: **216 passed, 1 skipped, 0 failed** (2 existing warnings; 217 passed, 1 skipped after the task-delete cascade fix of 2026-10-13). The only skip is the credential-gated watsonx smoke with credentials disabled. This run used the actual local source mounted read-only, not a stale container copy. The separate real smoke previously passed; it was not rerun for this change.
 
 The current MVP is **feature-frozen**. Completed architecture decisions remain closed; the priorities below concern evidence, validation, deployment and presentation.
 
@@ -94,7 +94,7 @@ Bilingual UI (EN/PT, user-requested, 2026-10-12): `src/i18n/` holds a typed `mes
 
 Theme (light/dark, user-requested): semantic CSS variables in `index.css` (`:root` light, `:root[data-theme="dark"]` dark), typed `src/theme/` provider, manual choice saved as `lifeops-theme`, otherwise follows `prefers-color-scheme`; an inline script in `index.html` applies it before first paint.
 
-Template layout (user-requested, 2026-10-13): the single page follows the "Massively" template by HTML5 UP (CCA 3.0; the footer must keep the visible "Design: HTML5 UP" credit with link). Structure in `App.tsx`: `#wrapper` with a fixed hero background layer, `#header` logo, `#nav` pill menu (anchors `#tasks`, `#commitments`, `#planner`, plus EN | PT and theme controls, with `useActiveSection` highlighting the current section), `#main` with an intro post and the three existing panels, `#footer` (about + principles, no contact form) and `#copyright`. Fonts come from Google Fonts (Merriweather, Source Sans Pro) via `index.html`. jQuery, Scrollex and Font Awesome from the template are deliberately NOT used. The hero image is a placeholder: save a photo as `frontend/public/images/hero.jpg` and set `--hero-image: url('/images/hero.jpg');` in `index.css` (a dark scrim is applied so the nav stays readable). Only markup and styling changed; panel logic, API payloads and the recommend → decision → book flow are untouched. Light-theme text accent is `#0a7295` (the template's `#18bfef` fails AA on white and is used only for fills and borders).
+Template layout (user-requested, 2026-10-13): the single page follows the "Massively" template by HTML5 UP (CCA 3.0; the footer must keep the visible "Design: HTML5 UP" credit with link). Structure in `App.tsx`: `#wrapper` with a fixed hero background layer, `#header` logo, `#nav` pill menu (anchors `#tasks`, `#commitments`, `#planner`, plus EN | PT and theme controls, with `useActiveSection` highlighting the current section), `#main` with an intro post and the three existing panels, `#footer` (about + principles, no contact form) and `#copyright`. Fonts come from Google Fonts (Merriweather, Source Sans Pro) via `index.html`. jQuery, Scrollex and Font Awesome from the template are deliberately NOT used. No hero photo is used: the background is a dark scrim over a gradient (`--hero-scrim`, `--hero-fallback` in `index.css`) so the nav stays readable; the decorative Bob mascot images live in `frontend/public/images` and are placed from `App.tsx`/`App.css`. Only markup and styling changed; panel logic, API payloads and the recommend → decision → book flow are untouched. Light-theme text accent is `#0a7295` (the template's `#18bfef` fails AA on white and is used only for fills and borders).
 
 No router, state-management library, UI framework, charts, authentication or new frontend dependencies were added.
 
@@ -300,6 +300,8 @@ Never print credentials, dump environment files, commit secrets or persist raw c
 9. Existing Starlette/httpx and third-party model license warnings remain; chat removed only the text-generation deprecation warning.
 10. Timezone-aware scheduling is not implemented: naive local datetimes are intentionally preserved end-to-end.
 11. Frontend has no automated interaction test runner yet and remains an MVP rather than a production design.
+12. Resolved (2026-10-13): `DELETE /api/v1/tasks/{id}` returned HTTP 500 for a task with a ScheduledSlot because the ORM tried to NULL `slot.task_id` before the database cascade. Fixed with `cascade="all, delete-orphan"` on `Task.scheduled_slot`; deleting a task now removes its slot and its AI recommendations (DB `ON DELETE CASCADE`). Regression test: `test_delete_task_with_slot_and_recommendation_cascades`.
+13. Frontend: pending tasks whose deadline is before today's local date show "Deadline expired" and cannot be planned (display-only guard; the backend remains authoritative and returns 422 for them).
 
 Do not opportunistically clean up warnings or expand architecture. Address them only when functionally necessary or through approved dedicated work.
 
