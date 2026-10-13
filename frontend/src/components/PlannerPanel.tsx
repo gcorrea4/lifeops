@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, errorMessage } from '../api/client'
 import type { DecisionRequest, DecisionResponse, RecommendResponse, ScheduledSlot, Task, UserAction } from '../api/types'
 import { useI18n } from '../i18n/context'
-import { formatSlot, formatDatetime } from '../utils/format'
+import { formatSlot, formatDatetime, isDeadlineExpired } from '../utils/format'
 
 type PlannerState =
   | { phase: 'idle' }
@@ -30,7 +30,8 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
     return () => { mounted.current = false }
   }, [])
   const task = tasks.find((item) => item.id === selectedTaskId)
-  const pending = tasks.filter((item) => item.status === 'pending')
+  // Expired pending tasks have no valid candidates, so they are not offered for planning.
+  const pending = tasks.filter((item) => item.status === 'pending' && !isDeadlineExpired(item.deadline))
   const recommendation = 'recommendation' in state ? state.recommendation : null
   const loading = state.phase === 'recommending' || busy !== null
 

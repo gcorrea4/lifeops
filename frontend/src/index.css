@@ -8,9 +8,7 @@
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   color-scheme: light;
 
-  /* Hero background. To use your own photo: save it as frontend/public/images/hero.jpg
-     and replace the next line with:  --hero-image: url('/images/hero.jpg');  */
-  --hero-image: none;
+  /* Hero background: dark scrim over a gradient (no photo). */
   --hero-scrim: linear-gradient(rgba(0, 0, 0, .35), rgba(0, 0, 0, .35));
   --hero-fallback: radial-gradient(60rem 30rem at 50% 0%, rgba(24, 191, 239, .22), transparent 70%), linear-gradient(160deg, #1e252d, #2a3541);
 
@@ -81,13 +79,14 @@ h3 { font-size: 1.05rem; margin-bottom: 1rem; }
 /* Buttons: outline by default, filled when .primary */
 button { appearance: none; display: inline-block; min-height: 3rem; padding: .7rem 1.6rem; border: 0; border-radius: 0; background: transparent; color: var(--text); box-shadow: inset 0 0 0 2px var(--text); cursor: pointer; font-family: var(--font-heading); font-size: .8rem; font-weight: 900; letter-spacing: .075em; line-height: 1.4; text-align: center; text-transform: uppercase; transition: background-color .2s ease-in-out, box-shadow .2s ease-in-out, color .2s ease-in-out; }
 button:hover:not(:disabled) { color: var(--accent-text); box-shadow: inset 0 0 0 2px var(--accent-text); }
-button:disabled { cursor: not-allowed; opacity: .35; }
+button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* Fields */
 label { display: block; font-family: var(--font-heading); font-size: .8rem; font-weight: 900; letter-spacing: .075em; line-height: 1.5; margin-bottom: .75rem; text-transform: uppercase; }
 input, select, textarea { appearance: none; display: block; width: 100%; min-height: 3rem; padding: .5rem 1rem; border: 2px solid var(--border-strong); border-radius: 0; background-color: transparent; color: var(--text); font-size: .9rem; line-height: 1.5; outline: 0; }
 input:hover, select:hover { border-color: var(--accent-text); }
-input:focus, select:focus { border-color: var(--accent-text); box-shadow: 0 0 0 1px var(--accent-text); }
+input:focus, select:focus { box-shadow: none; }
+input:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 select { padding-right: 3rem; background-image: var(--select-arrow); background-repeat: no-repeat; background-size: 1.1rem; background-position: calc(100% - 1rem) center; text-overflow: ellipsis; }
 select option { background: var(--surface); color: var(--text); }
 input[type="radio"] { appearance: auto; min-height: auto; accent-color: var(--accent-strong); }

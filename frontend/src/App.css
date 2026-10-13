@@ -2,7 +2,7 @@
 
 /* Wrapper and hero background */
 #wrapper { position: relative; z-index: 1; overflow: hidden; }
-#wrapper > .bg { position: fixed; inset: 0; z-index: -1; background-color: #1e252d; background-image: var(--hero-scrim), var(--hero-image), var(--hero-fallback); background-size: auto, cover, auto; background-position: center, top center, center; background-repeat: no-repeat; }
+#wrapper > .bg { position: fixed; inset: 0; z-index: -1; background-color: #1e252d; background-image: var(--hero-scrim), var(--hero-fallback); background-size: auto, auto; background-position: center, center; background-repeat: no-repeat; }
 
 /* Header and logo */
 #header { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 20rem; padding-bottom: 8rem; text-align: center; }
@@ -39,6 +39,13 @@
 header.major .date { display: block; margin: 0 0 1rem; color: var(--muted); font-family: var(--font-heading); font-size: .8rem; font-weight: 900; letter-spacing: .075em; line-height: 1.5; text-transform: uppercase; }
 header.major h1 { font-size: 4rem; margin-bottom: 1.5rem; }
 header.major p { margin: 0; max-width: 40rem; font-size: 1.1rem; font-style: italic; line-height: 2; }
+/* Hero mascot (Bob): stands on the divider line at the bottom-right of the hero */
+#top { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; }
+#top > header.major { flex: 1 1 auto; min-width: 0; }
+.hero-bob { flex: 0 0 auto; margin-bottom: -4rem; line-height: 0; pointer-events: none; user-select: none; }
+.hero-bob img { display: block; width: clamp(8rem, 14vw, 10rem); height: auto; }
+/* Bob's outline is near-black, so give it a soft light edge on the dark theme */
+:root[data-theme="dark"] .hero-bob img { filter: drop-shadow(0 0 1px rgba(255, 255, 255, .85)) drop-shadow(0 0 10px rgba(110, 150, 255, .25)); }
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
 .section-heading h2, .section-heading h3 { margin-bottom: 0; }
 .eyebrow { display: block; margin-bottom: .25rem; color: var(--accent-text); font-family: var(--font-heading); font-size: .75rem; font-weight: 900; letter-spacing: .12em; line-height: 1.5; text-transform: uppercase; }
@@ -46,11 +53,12 @@ header.major p { margin: 0; max-width: 40rem; font-size: 1.1rem; font-style: ita
 /* Buttons */
 .primary { background: var(--primary-bg); color: var(--primary-fg); box-shadow: none; }
 .primary:hover:not(:disabled) { background: var(--primary-hover-bg); color: var(--primary-hover-fg); box-shadow: none; }
+.primary:disabled { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 2px var(--border-strong); }
 .quiet { min-height: 2.4rem; padding: .2rem .6rem; box-shadow: none; color: var(--muted); font-size: .7rem; }
 .quiet:hover:not(:disabled) { box-shadow: none; color: var(--accent-text); }
 
 /* Record lists */
-.record-list { list-style: none; padding: 0; margin: 0 0 2rem; max-height: 22rem; overflow: auto; scrollbar-width: thin; }
+.record-list { list-style: none; padding: 0; margin: 0 0 2rem; max-height: 30rem; overflow: auto; scrollbar-width: thin; }
 .record-list:empty { display: none; }
 .record-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .9rem .15rem; border-bottom: 2px solid var(--border); }
 .record-list li:last-child { border-bottom: 0; }
@@ -60,6 +68,9 @@ header.major p { margin: 0; max-width: 40rem; font-size: 1.1rem; font-style: ita
 .record-meta { margin: .1rem 0 .4rem; color: var(--muted); font-size: .78rem; line-height: 1.7; }
 .badge { display: inline-block; padding: .1rem .6rem; border: 2px solid var(--badge-border); border-radius: 0; background: var(--badge-bg); color: var(--badge-text); font-family: var(--font-heading); font-size: .62rem; font-weight: 900; letter-spacing: .075em; line-height: 1.7; text-transform: uppercase; overflow-wrap: anywhere; }
 .badge[class*="status-"]::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: .45rem; border-radius: 50%; background: currentColor; vertical-align: middle; }
+.badge.expired { margin-left: .4rem; color: var(--err-fg); background: var(--err-bg); border-color: var(--err-border); }
+.badge.expired::before { content: "!"; display: inline-block; margin-right: .4rem; font-weight: 900; }
+.record-list li > button:disabled { color: var(--muted); box-shadow: inset 0 0 0 2px var(--border-strong); text-decoration: line-through; opacity: .75; }
 .status-scheduled { color: var(--ok-fg); background: var(--ok-bg); border-color: var(--ok-border); }
 .status-pending { color: var(--warn-fg); background: var(--warn-bg); border-color: var(--warn-border); }
 .status-done { color: var(--neutral-fg); background: var(--neutral-bg); border-color: var(--neutral-border); }
@@ -137,6 +148,7 @@ p.success { color: var(--ok-fg); background: var(--ok-bg); border-color: var(--o
   #nav .links { flex-wrap: wrap; }
   #nav .links a { padding: 0 1rem; }
   #main > .context-grid { grid-template-columns: 1fr; }
+  .hero-bob { display: none; }
   .context-grid > .panel + .panel { border-left: 0; border-top: 2px solid var(--border); }
   #footer { display: block; }
   #footer > section { border-left: 0; border-top: 2px solid var(--border); }

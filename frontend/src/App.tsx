@@ -70,7 +70,7 @@ function App() {
 
   return (
     <div id="wrapper">
-      {/* Hero background layer. To use your own photo, see --hero-image in index.css. */}
+      {/* Hero background layer (gradient + scrim defined in index.css). */}
       <div className="bg" aria-hidden="true" />
       <header id="header">
         <a href="#top" className="logo">LifeOps</a>
@@ -106,6 +106,11 @@ function App() {
             <h1>{t.heroTitle}</h1>
             <p>{t.heroText}</p>
           </header>
+          {/* Mascot: animated WebP with transparency; static frame for reduced motion. */}
+          <picture className="hero-bob" aria-hidden="true">
+            <source media="(prefers-reduced-motion: reduce)" srcSet="/images/bob-still.webp" />
+            <img src="/images/bob.webp" alt="" width={290} height={334} decoding="async" />
+          </picture>
         </section>
         <div className="context-grid">
           <TasksPanel tasks={tasks} loading={taskLoading} error={taskError}
@@ -133,7 +138,6 @@ function App() {
       <div id="copyright">
         <ul>
           <li>&copy; LifeOps</li>
-          <li>Design: <a href="https://html5up.net" target="_blank" rel="noreferrer">HTML5 UP</a></li>
         </ul>
       </div>
     </div>

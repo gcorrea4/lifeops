@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { api, errorMessage } from '../api/client'
 import type { Priority, Task } from '../api/types'
 import { useI18n } from '../i18n/context'
-import { formatDate } from '../utils/format'
+import { formatDate, isDeadlineExpired } from '../utils/format'
 
 interface Props {
   tasks: Task[]; loading: boolean; error: string
@@ -42,13 +42,20 @@ export default function TasksPanel({ tasks, loading, error, onRefresh, onCreated
       {error && <p className="error" role="alert">{error}</p>}
       {!loading && !error && tasks.length === 0 && <p className="muted">{t.tasksEmpty}</p>}
       <ul className="record-list">
-        {tasks.map((task) => <li key={task.id}>
-          <div><strong>{task.title}</strong><div className="record-meta">
-            {t.taskMeta(task.duration_minutes, (t.priorities[task.priority] ?? task.priority).toLowerCase())}
-            {' · '}{formatDate(task.deadline, t.noDeadline)}
-          </div><span className={'badge status-' + task.status}>{t.status[task.status] ?? task.status}</span></div>
-          {task.status === 'pending' && <button type="button" onClick={() => onPlan(task.id)}>{t.plan}</button>}
-        </li>)}
+        {tasks.map((task) => {
+          const expired = task.status === 'pending' && isDeadlineExpired(task.deadline)
+          return <li key={task.id}>
+            <div><strong>{task.title}</strong><div className="record-meta">
+              {t.taskMeta(task.duration_minutes, (t.priorities[task.priority] ?? task.priority).toLowerCase())}
+              {' · '}{formatDate(task.deadline, t.noDeadline)}
+            </div><span className={'badge status-' + task.status}>{t.status[task.status] ?? task.status}</span>
+              {expired && <span id={'expired-' + task.id} className="badge expired">{t.deadlineExpired}</span>}
+            </div>
+            {task.status === 'pending' && (expired
+              ? <button type="button" disabled aria-describedby={'expired-' + task.id} title={t.planDisabledExpired}>{t.plan}</button>
+              : <button type="button" onClick={() => onPlan(task.id)}>{t.plan}</button>)}
+          </li>
+        })}
       </ul>
       <form onSubmit={(event) => void create(event)} className="create-form">
         <h3>{t.createTaskHeading}</h3>

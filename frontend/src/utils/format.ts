@@ -4,6 +4,13 @@ export function formatDate(value: string | null | undefined, empty = ''): string
   const [year, month, day] = value.split('-')
   return `${day}/${month}/${year}`
 }
+// True when a 'YYYY-MM-DD' deadline is before today's local date. Display logic only; the backend stays authoritative.
+export function isDeadlineExpired(deadline: string | null | undefined, now: Date = new Date()): boolean {
+  if (!deadline) return false
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  return deadline < today
+}
 export function formatDatetime(value: string): string {
   const [date, time = ''] = value.split('T')
   return `${formatDate(date)} · ${time.slice(0, 5)}`
