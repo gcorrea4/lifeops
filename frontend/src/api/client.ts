@@ -41,10 +41,21 @@ async function request<T>(path: string, body?: unknown, signal?: AbortSignal): P
   return response.json() as Promise<T>
 }
 
-// Display text only: known backend details are translated by exact match; unknown ones are shown as received.
+// Display text only. Known backend details are translated; unknown ones are shown as received.
+// Request-validation errors arrive as "field: Value error, <detail>" (several joined by "; "), so each
+// part is matched by exact text or by ending with a known detail; the technical prefix is then dropped.
+function translateDetail(message: string, known: Record<string, string>): string {
+  return message.split('; ').map((part) => {
+    const exact = known[part]
+    if (exact) return exact
+    const suffix = Object.keys(known).find((key) => part.endsWith(': ' + key) || part.endsWith(', ' + key))
+    return suffix ? known[suffix] : part
+  }).join('; ')
+}
+
 export function errorMessage(error: unknown, t: Pick<Messages, 'connectionError' | 'backendErrors'>): string {
   return error instanceof ApiError
-    ? `HTTP ${error.status}: ${t.backendErrors[error.message] ?? error.message}`
+    ? `HTTP ${error.status}: ${translateDetail(error.message, t.backendErrors)}`
     : t.connectionError
 }
 
