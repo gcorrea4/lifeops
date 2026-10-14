@@ -58,7 +58,7 @@ Relevant backend directories under `backend/app/`:
 - `ai/agent.py`, `ai/schemas.py`, `ai/provider.py`: prompt, model-output guards and provider transport.
 - `core/settings.py`: environment-backed configuration.
 
-`backend/tests/` contains isolated engine, CRUD, AI, router and mocked chat tests plus the credential-gated live smoke test. Docker Compose runs MySQL and API, not the frontend. Application lifespan currently creates tables through SQLAlchemy metadata; do not invent a migration framework.
+`backend/tests/` contains isolated engine, CRUD, AI, router and mocked chat tests plus the credential-gated live smoke test. Docker Compose runs MySQL and API, not the frontend. `DB_SSL_CA` (optional, empty by default) enables a TLS connection verified against a CA file for managed MySQL services; with it empty the local plain connection is unchanged. Application lifespan currently creates tables through SQLAlchemy metadata; do not invent a migration framework.
 
 ## Do Not Regress These Decisions
 
@@ -285,7 +285,7 @@ Latest validation ran against a read-only bind mount of the actual local backend
 
 The former clock-dependent booking test now uses a fixed clock with no time-of-day skip. Engine/planner router and BookRequest time tests use fixed timestamps; pure service tests receive explicit now. The only skip is the live smoke without credentials. The earlier live smoke and real frontend flow were not rerun for governance or this documentation update.
 
-Never print credentials, dump environment files, commit secrets or persist raw completions. Dependencies are currently unpinned; SDK 1.8.0 is the tested version, not a requirements pin.
+Never print credentials, dump environment files, commit secrets or persist raw completions. Backend dependencies are pinned in `backend/requirements.txt` to the versions validated on 2026-10-13 (including `ibm-watsonx-ai==1.8.0`); transitive packages are not locked.
 
 ## Known Technical Debt and Limits
 
@@ -334,6 +334,10 @@ For each major sub-task:
 Preferred Bob workflow: Plan → human review → Agent implementation → tests → validation → reviewed commit. Bob is not the only tool that may assist.
 
 Read README for the external overview, watsonx-validation-plan.md for completed real validation, and BOB-DEVELOPMENT-LOG.md for chronology. lifeops-week1-plan.md, lifeops-week2-plan.md, lifeops-st*-plan.md and the pre-chat watsonx-e2e-validation-report.md retain historical proposals/results; their stale unchecked tasks, datetime-output examples and settings-derived audit suggestions must not override current contracts.
+
+## Deployment State (2026-10-13)
+
+The API runs on Azure App Service (F1, Linux, Python 3.12, South Central US) at `https://lifeops-api-xwc56.azurewebsites.net` with an Azure Database for MySQL Flexible Server (B1ms, East US) in resource group `lifeops-rg`; configuration is in app settings (database, watsonx, `TZ=America/Sao_Paulo`, `DB_SSL_CA=/etc/ssl/certs/ca-certificates.crt`), never in the repository. The frontend is meant for Vercel using `frontend/vercel.json` (rewrite of `/api/*` to the API). F1 limits: about 60 CPU minutes per day, no Always On (cold start of about 20 s after idle), no SLA. The database is a paid resource intended to live about one week; delete the group when done. This remains a demo MVP: no authentication, `user_id` 1, naive datetimes.
 
 ## Do Not Implement Yet
 

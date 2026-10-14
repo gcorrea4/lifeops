@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     DB_NAME: str = "lifeops"
     DB_USER: str = "root"
     DB_PASSWORD: str = ""
+    # Optional path to a CA certificate. Managed MySQL services (Azure, Aiven, ...) require TLS;
+    # when set, the connection is encrypted and the server is verified against this CA.
+    # Empty keeps the plain local connection used with Docker Compose.
+    DB_SSL_CA: str = ""
 
     # --- Working window ---
     WORK_START: time = time(8, 0)

@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://lifeops-api-xwc56.azurewebsites.net/api/:path*"
+    }
+  ]
+}
