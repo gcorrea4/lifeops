@@ -35,7 +35,17 @@ from app.ai.schemas import (
     TaskSummary,
 )
 
-_FALLBACK_EXPLANATION = "Default recommendation: first available valid slot selected."
+_FALLBACK_EXPLANATIONS = {
+    "en": "Default recommendation: first available valid slot selected.",
+    "pt": "Recomendação padrão: primeiro horário válido selecionado.",
+}
+_FALLBACK_EXPLANATION = _FALLBACK_EXPLANATIONS["en"]
+
+# Extra prompt line per language. English needs none: the prompt is already in English.
+_LANGUAGE_INSTRUCTIONS = {
+    "en": "",
+    "pt": "Write the explanation in Brazilian Portuguese.",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -145,11 +155,11 @@ class PlannerAgent:
         try:
             raw = self._provider.complete(prompt)
         except ProviderError:
-            return self._fallback(candidates)
+            return self._fallback(candidates, agent_input.language)
 
         recommendation = self._parse_response(raw, agent_input)
         if recommendation is None:
-            return self._fallback(candidates)
+            return self._fallback(candidates, agent_input.language)
 
         return recommendation
 
@@ -201,6 +211,7 @@ class PlannerAgent:
             '  "explanation": "<one sentence, max 200 characters>"\n'
             "}\n\n"
             "Do not add any text, markdown, or explanation outside the JSON object."
+            f"\n{_LANGUAGE_INSTRUCTIONS.get(agent_input.language, '')}".rstrip("\n")
         )
 
     def _parse_response(
@@ -261,7 +272,7 @@ class PlannerAgent:
         except (json.JSONDecodeError, ValidationError, Exception):  # noqa: BLE001
             return None
 
-    def _fallback(self, candidates: list[CandidateSlot]) -> PlannerRecommendation:
+    def _fallback(self, candidates: list[CandidateSlot], language: str = "en") -> PlannerRecommendation:
         """
         Deterministic fallback: always selects candidates[0].
 
@@ -275,6 +286,6 @@ class PlannerAgent:
                 end_datetime=chosen.end_datetime,
             ),
             reason_codes=[ReasonCode.PROVIDER_FALLBACK],
-            explanation=_FALLBACK_EXPLANATION,
+            explanation=_FALLBACK_EXPLANATIONS.get(language, _FALLBACK_EXPLANATION),
             fallback_used=True,
         )

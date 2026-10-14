@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -90,6 +90,8 @@ class AgentInput(BaseModel):
 
     task: TaskSummary
     candidate_slots: list[CandidateSlot]
+    # Language the model should write its explanation in. It never affects scheduling or reason codes.
+    language: Literal["en", "pt"] = "en"
 
 
 # ---------------------------------------------------------------------------

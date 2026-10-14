@@ -116,6 +116,7 @@ Keep these interaction rules:
 - Book sends task_id from the recommendation and start_datetime from decision.final_start. Confirmation displays the returned ScheduledSlot, then refreshes Tasks.
 - Preserve original backend datetime strings in payloads. Never use toISOString() or convert naive datetimes to UTC; formatting is display-only.
 - Preserve recommendation/decision state on failed booking; show 422/404/409 backend messages.
+- The candidate radio shows the visitor's pick only while reviewing; after a decision it shows the decided slot (and after booking, the booked slot), never a leftover click.
 - Busy flags and submission refs block repeated clicks. Successful decisions disable further decisions on that snapshot.
 - App keys PlannerPanel by selected task; unmounted panels ignore stale responses. Booking completion still refreshes Tasks after a task switch.
 - A page reload discards the local planner flow. There is no recommendation-recovery endpoint or browser persistence.
@@ -212,6 +213,8 @@ PlannerAgent owns fence removal, json.loads, Pydantic structural validation, str
 | ONLY_SLOT_AVAILABLE | len(candidate_slots) == 1 |
 | DEADLINE_CLOSE | deadline exists and (deadline - selected_candidate.date).days <= 1 |
 | PROVIDER_FALLBACK | System-only fallback path |
+
+The recommend request accepts an optional `language` (`en` or `pt`, default `en`, anything else is HTTP 422). It only adds one line to the prompt ("Write the explanation in Brazilian Portuguese.") and localizes the deterministic fallback explanation; candidates, scheduling, reason codes and the two-field model contract are identical in both languages. The frontend sends the page language when it requests a recommendation; a stored explanation keeps the language it was written in if the visitor switches language afterwards.
 
 Multiple factual codes can apply together. DEADLINE_CLOSE uses calendar-date subtraction against the selected candidate, not current time or a rolling 48-hour window. MOST_BUFFER_BEFORE_DEADLINE has been removed from the final vocabulary. Historical audit rows are not rewritten.
 

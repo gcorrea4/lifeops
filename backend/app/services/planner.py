@@ -54,7 +54,7 @@ def get_recommendation_or_404(rec_id: int, db: Session, user_id: int = USER_ID) 
 # ---------------------------------------------------------------------------
 
 
-def build_agent_input(task: object, slots: list[SlotSuggestion]) -> AgentInput:
+def build_agent_input(task: object, slots: list[SlotSuggestion], language: str = "en") -> AgentInput:
     """Convert a Task ORM object and SlotSuggestion list into an AgentInput.
 
     Only the fields defined in TaskSummary are forwarded — no internal DB state
@@ -76,7 +76,7 @@ def build_agent_input(task: object, slots: list[SlotSuggestion]) -> AgentInput:
         )
         for s in slots
     ]
-    return AgentInput(task=task_summary, candidate_slots=candidate_slots)
+    return AgentInput(task=task_summary, candidate_slots=candidate_slots, language=language)
 
 
 # ---------------------------------------------------------------------------

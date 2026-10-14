@@ -10,7 +10,7 @@ POST /api/v1/planner/decision
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -26,6 +26,8 @@ from app.schemas.engine import SlotSuggestion
 class RecommendRequest(BaseModel):
     task_id: int
     from_date: Optional[date] = None
+    # Language of the model's free-text explanation; scheduling and reason codes are unaffected.
+    language: Literal["en", "pt"] = "en"
 
 
 # ---------------------------------------------------------------------------

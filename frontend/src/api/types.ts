@@ -33,7 +33,7 @@ export interface RecommendedSlot {
   end_datetime: string
 }
 export interface SlotSuggestion extends RecommendedSlot { date: string }
-export interface RecommendRequest { task_id: number; from_date?: string }
+export interface RecommendRequest { task_id: number; from_date?: string; language?: 'en' | 'pt' }
 export interface RecommendResponse {
   recommendation_id: number
   task_id: number

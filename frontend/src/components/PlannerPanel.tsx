@@ -18,7 +18,7 @@ interface Props {
   onRefreshTasks: () => Promise<void>
 }
 export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefreshTasks }: Props) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [state, setState] = useState<PlannerState>({ phase: 'idle' })
   const [candidateIndex, setCandidateIndex] = useState<number | null>(null)
   const [busy, setBusy] = useState<'decision' | 'booking' | null>(null)
@@ -34,13 +34,20 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
   const pending = tasks.filter((item) => item.status === 'pending' && !isDeadlineExpired(item.deadline))
   const recommendation = 'recommendation' in state ? state.recommendation : null
   const loading = state.phase === 'recommending' || busy !== null
+  // While reviewing, the radio shows the visitor's pick; afterwards it shows the slot that was decided or booked,
+  // so a leftover click never looks like the chosen slot.
+  const finalStart = state.phase === 'decided' ? state.decision.final_start
+    : state.phase === 'booked' ? state.slot.start_datetime : null
+  const checkedIndex = state.phase === 'review' ? candidateIndex
+    : recommendation && finalStart
+      ? recommendation.candidate_slots.findIndex((slot) => slot.start_datetime === finalStart) : -1
 
   async function recommend() {
     if (!task || task.status !== 'pending' || submitting.current) return
     submitting.current = true
     setError(''); setCandidateIndex(null); setState({ phase: 'recommending' })
     try {
-      const result = await api.recommend({ task_id: task.id })
+      const result = await api.recommend({ task_id: task.id, language: lang })
       if (mounted.current) setState({ phase: 'review', recommendation: result })
     } catch (error) {
       if (mounted.current) { setError(errorMessage(error, t)); setState({ phase: 'idle' }) }
@@ -126,7 +133,7 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
           <legend>{t.candidates}</legend>
           <p className="muted">{t.chooseCandidate}</p>
           {recommendation.candidate_slots.map((candidate, index) => <label className="candidate" key={index}>
-            <input type="radio" name="candidate" value={index} checked={candidateIndex === index}
+            <input type="radio" name="candidate" value={index} checked={checkedIndex === index}
               onChange={() => setCandidateIndex(index)} />
             <span>{formatSlot(candidate)}</span>
             {candidate.start_datetime === recommendation.recommended_slot.start_datetime

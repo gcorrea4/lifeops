@@ -149,7 +149,7 @@ def recommend(
         )
 
     # 8. Build agent input and run recommendation
-    agent_input = build_agent_input(task, candidate_slots)
+    agent_input = build_agent_input(task, candidate_slots, payload.language)
     # Global daily AI cap: past it, the deterministic fallback is used without calling the model.
     if ai_cap_reached(db):
         provider = CappedProvider(provider)
