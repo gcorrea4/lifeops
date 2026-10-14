@@ -19,9 +19,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.ai.agent import PlannerAgent
-from app.ai.provider import AbstractProvider, get_provider
+from app.ai.provider import AbstractProvider, CappedProvider, get_provider
 from app.core import clock
-from app.core.session import current_user_id, enforce_recommendation_limit
+from app.core.session import ai_cap_reached, current_user_id, enforce_recommendation_limit
 from app.core.settings import settings
 from app.database import get_db
 from app.models.fixed_block import FixedBlock
@@ -150,6 +150,9 @@ def recommend(
 
     # 8. Build agent input and run recommendation
     agent_input = build_agent_input(task, candidate_slots)
+    # Global daily AI cap: past it, the deterministic fallback is used without calling the model.
+    if ai_cap_reached(db):
+        provider = CappedProvider(provider)
     agent = PlannerAgent(provider)
     recommendation = agent.recommend(agent_input)
 

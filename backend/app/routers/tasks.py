@@ -5,7 +5,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.session import current_user_id, purge_expired
+from app.core.session import TASK_LIMIT_DETAIL, current_user_id, enforce_item_limit, purge_expired
+from app.core.settings import settings
 from app.database import get_db
 from app.models.enums import TaskStatus
 from app.models.task import Task
@@ -32,6 +33,7 @@ def create_task(
     user_id: int = Depends(current_user_id),
 ) -> Task:
     purge_expired(db)
+    enforce_item_limit(db, Task, user_id, settings.MAX_TASKS_PER_VISITOR, TASK_LIMIT_DETAIL)
     task_data = payload.model_dump()
     task = Task(
         user_id=user_id,

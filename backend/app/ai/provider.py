@@ -137,6 +137,28 @@ class MockProvider(AbstractProvider):
         return self._response
 
 
+class CappedProvider(AbstractProvider):
+    """Stands in for a real provider once the global daily AI cap is reached.
+
+    It keeps the real provider's name and model id for the audit trail but never calls the model:
+    complete() raises ProviderError, so PlannerAgent returns its deterministic fallback.
+    """
+
+    def __init__(self, inner: AbstractProvider) -> None:
+        self._inner = inner
+
+    @property
+    def provider_name(self) -> str:
+        return self._inner.provider_name
+
+    @property
+    def model_id(self) -> str:
+        return self._inner.model_id
+
+    def complete(self, prompt: str) -> str:  # noqa: ARG002
+        raise ProviderError("daily AI call cap reached; using the deterministic fallback")
+
+
 # ---------------------------------------------------------------------------
 # FastAPI dependency
 # ---------------------------------------------------------------------------

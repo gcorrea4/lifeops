@@ -15,6 +15,16 @@ class Settings(BaseSettings):
     # Empty keeps the plain local connection used with Docker Compose.
     DB_SSL_CA: str = ""
 
+    # --- Public demo protection (all off by default, so local development is unchanged) ---
+    # Refuse requests that carry no X-Session-Id header instead of sharing the default user.
+    REQUIRE_SESSION: bool = False
+    # Max real AI calls per 24 hours across all visitors; beyond it the deterministic fallback is
+    # used without calling the model. 0 = no cap.
+    AI_DAILY_CAP: int = 0
+    # Max tasks and commitments per visitor (the default user is exempt). 0 = unlimited.
+    MAX_TASKS_PER_VISITOR: int = 0
+    MAX_BLOCKS_PER_VISITOR: int = 0
+
     # --- Working window ---
     WORK_START: time = time(8, 0)
     WORK_END: time = time(22, 0)

@@ -5,7 +5,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.session import current_user_id, purge_expired
+from app.core.session import BLOCK_LIMIT_DETAIL, current_user_id, enforce_item_limit, purge_expired
+from app.core.settings import settings
 from app.database import get_db
 from app.models.fixed_block import FixedBlock
 from app.schemas.fixed_block import FixedBlockCreate, FixedBlockRead, FixedBlockUpdate
@@ -36,6 +37,7 @@ def create_block(
     user_id: int = Depends(current_user_id),
 ) -> FixedBlock:
     purge_expired(db)
+    enforce_item_limit(db, FixedBlock, user_id, settings.MAX_BLOCKS_PER_VISITOR, BLOCK_LIMIT_DETAIL)
     candidate: dict = payload.model_dump()
     # Enforce recurrence mutual exclusivity and time validity on creation too
     validate_recurrence(candidate)

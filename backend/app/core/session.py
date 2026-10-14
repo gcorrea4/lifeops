@@ -21,6 +21,7 @@ from fastapi import Header, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.settings import settings
 from app.models.ai_recommendation import AIRecommendation
 from app.models.fixed_block import FixedBlock
 from app.models.task import Task
@@ -32,6 +33,9 @@ SESSION_TTL_HOURS = 24
 DAILY_RECOMMENDATION_LIMIT = 10
 PURGE_INTERVAL = timedelta(minutes=30)
 RATE_LIMIT_DETAIL = "daily recommendation limit reached"
+SESSION_REQUIRED_DETAIL = "session id required"
+TASK_LIMIT_DETAIL = "task limit reached"
+BLOCK_LIMIT_DETAIL = "commitment limit reached"
 
 _SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 _purge_lock = threading.Lock()
@@ -47,6 +51,8 @@ def user_id_from_session(session_id: str) -> int:
 def current_user_id(x_session_id: str | None = Header(default=None)) -> int:
     """FastAPI dependency: the user id of the caller."""
     if not x_session_id:
+        if settings.REQUIRE_SESSION:
+            raise HTTPException(status_code=400, detail=SESSION_REQUIRED_DETAIL)
         return DEFAULT_USER_ID
     if not _SESSION_ID_PATTERN.match(x_session_id):
         raise HTTPException(status_code=400, detail="invalid session id")
@@ -100,3 +106,28 @@ def enforce_recommendation_limit(db: Session, user_id: int, now: datetime | None
     )
     if used >= DAILY_RECOMMENDATION_LIMIT:
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL)
+
+
+def ai_cap_reached(db: Session, now: datetime | None = None) -> bool:
+    """True when the global daily cap of real AI calls (AI_DAILY_CAP) has been used up.
+
+    Only recommendations that did not fall back count, since those are the real model calls.
+    """
+    if settings.AI_DAILY_CAP <= 0:
+        return False
+    since = (now or _utc_now()) - timedelta(hours=24)
+    used = (
+        db.query(func.count(AIRecommendation.id))
+        .filter(AIRecommendation.fallback_used.is_(False), AIRecommendation.created_at >= since)
+        .scalar()
+    )
+    return used >= settings.AI_DAILY_CAP
+
+
+def enforce_item_limit(db: Session, model, user_id: int, limit: int, detail: str) -> None:
+    """Raise 429 when a visitor already owns `limit` rows of `model` (0 = unlimited; default user exempt)."""
+    if limit <= 0 or user_id == DEFAULT_USER_ID:
+        return
+    owned = db.query(func.count(model.id)).filter(model.user_id == user_id).scalar()
+    if owned >= limit:
+        raise HTTPException(status_code=429, detail=detail)

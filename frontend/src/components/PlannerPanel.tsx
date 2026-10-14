@@ -115,6 +115,7 @@ export default function PlannerPanel({ tasks, selectedTaskId, onSelect, onRefres
             <span className="muted">{t.recommendationNumber(recommendation.recommendation_id)}</span></div>
           <p className="slot-heading">{formatSlot(recommendation.recommended_slot)}</p>
           <p>{recommendation.explanation}</p>
+          <p className="note">{t.explanationNote}</p>
           <div className="badges">{recommendation.reason_codes.map((code) =>
             <span className="badge" key={code} title={t.reasonCodes[code]}>{code}</span>)}</div>
           <p className={recommendation.fallback_used ? 'fallback' : 'muted'}>

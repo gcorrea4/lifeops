@@ -95,7 +95,8 @@ p.success { color: var(--ok-fg); background: var(--ok-bg); border-color: var(--o
 .recommendation .section-heading { margin-bottom: .75rem; }
 .recommendation h3 { color: var(--accent-text); }
 .slot-heading { margin-bottom: .75rem; color: var(--slot-text); font-family: var(--font-heading); font-size: clamp(1.15rem, 2.2vw, 1.6rem); font-weight: 900; letter-spacing: .04em; line-height: 1.4; font-variant-numeric: tabular-nums; }
-.recommendation > p:not(.slot-heading):not(.fallback):not(.muted) { max-width: 76ch; font-size: .92rem; }
+.recommendation > p:not(.slot-heading):not(.fallback):not(.muted):not(.note) { max-width: 76ch; font-size: .92rem; }
+.recommendation > .note { margin: -.25rem 0 1rem; color: var(--muted); font-size: .74rem; font-style: italic; line-height: 1.6; }
 .badges { display: flex; flex-wrap: wrap; gap: .4rem; }
 .recommendation .badge { background: var(--rec-badge-bg); border-color: var(--rec-badge-border); color: var(--rec-badge-text); }
 .fallback { display: inline-block; margin-top: 1rem; padding: .4rem .8rem; color: var(--fb-fg); background: var(--fb-bg); border: 2px solid var(--fb-border); font-size: .78rem; line-height: 1.7; }

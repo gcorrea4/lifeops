@@ -1,35 +1,64 @@
 # LifeOps
 
+**Live demo: https://boblifeops.vercel.app** (English and Portuguese, light and dark theme)
+
 LifeOps helps organize personal tasks around fixed commitments such as university, work, travel, and overnight events. It addresses the difficulty of finding realistic time for tasks with different durations, priorities, and deadlines.
+
+> AI-assisted, human-controlled and auditable by design. A deterministic engine decides what is valid, an AI suggests one option, and the person decides.
+
+<!-- Screenshots: add images here (for example docs/screenshots/*.png). -->
 
 ## How it works
 
 LifeOps combines a deterministic availability engine with an AI recommendation layer. The engine computes candidate slots from scheduling constraints, excludes starts at or before the current time, and enforces the configured daily work window when booking. The model returns only a candidate ID and a concise explanation; the backend derives reason codes deterministically. AI never creates availability or invents scheduling datetimes.
 
-Recommendations, human decisions, and booking are separate actions. Approving a recommendation leaves the task pending. An explicit booking request revalidates current conflicts and deadlines before creating a scheduled slot.
+```
+Commitments + tasks + existing slots + rules
+        -> deterministic availability engine -> valid candidate slots
+        -> PlannerAgent -> IBM watsonx picks a candidate_id
+        -> backend guards + derived reason codes -> persisted recommendation (audit)
+        -> human decision: APPROVED / MODIFIED / REJECTED (task stays pending)
+        -> explicit booking, revalidated against current state -> scheduled slot
+```
 
-The audit trail records the provider, model, original candidates, recommendation, explanation, fallback status, and human decision. Raw model output and hidden chain-of-thought are not stored.
+Recommendations, human decisions, and booking are separate actions. Approving a recommendation leaves the task pending. An explicit booking request revalidates current conflicts and deadlines before creating a scheduled slot. If the model fails or answers invalidly, the system falls back to the first valid slot and says so.
 
-## Stack and development
+The audit trail records the provider, model, original candidates, recommendation, explanation, fallback status, and human decision. Raw model output and hidden chain-of-thought are not stored. The free-text explanation is written by the model and can be imprecise; the reason codes are computed by the system.
 
-- React, TypeScript, and Vite one-page frontend MVP.
-- Python, FastAPI, Pydantic, SQLAlchemy, and MySQL 8 backend.
-- Docker and Docker Compose.
-- pytest with isolated SQLite integration tests.
-- IBM watsonx through the IBM watsonx AI SDK.
+## Stack
 
-IBM Bob has supported planning and implementation across the software development lifecycle, with human review of plans before Agent implementation. Codex has also assisted with frontend implementation, validation and documentation; Bob was not the only tool used.
+- Frontend: React, TypeScript, Vite, plain responsive CSS, EN/PT interface, light/dark theme. Layout adapted from the Massively template by HTML5 UP.
+- Backend: Python, FastAPI, Pydantic, SQLAlchemy.
+- Database: MySQL 8 (Docker Compose locally, Azure Database for MySQL in the demo).
+- AI: IBM watsonx through the IBM watsonx AI SDK (`meta-llama/llama-3-3-70b-instruct`).
+- Tests: pytest with isolated SQLite integration tests.
+- Hosting of the demo: Vercel (frontend), Azure App Service (API), Azure Database for MySQL.
 
-## Current status
+IBM Bob has supported planning and implementation across the software development lifecycle, with human review of plans before Agent implementation. Codex and Claude Code have also assisted with implementation, validation and documentation; no single tool did all of the work.
 
-ST-1 through ST-9, including ST-8 cleanup, are complete. Backend CRUD, deterministic scheduling, PlannerAgent, recommendation and decision endpoints, audit persistence, and real watsonx integration are implemented. The frontend MVP is complete: create/list tasks and commitments, review recommendations and original candidates, approve/modify/reject, and explicitly book. Weekly, one-off and overnight commitments are supported. Deployment is planned; this is not a production design.
+## Run locally
 
-Recorded backend automated results: **216 passed, 1 skipped, 0 failed**. The only skip is the credential-gated live smoke when credentials are disabled; that smoke passed separately. Frontend TypeScript/Vite build and lint passed with no warnings.
+```bash
+cp .env.example .env          # fill the database values; leave AI_PROVIDER=mock to run without credentials
+docker compose up -d          # MySQL and the API on http://localhost:8000
+cd frontend && npm install && npm run dev   # http://localhost:5173 (proxies /api to the API)
+```
 
-Real IBM Cloud authentication and watsonx Runtime calls were validated using `meta-llama/llama-3-3-70b-instruct`. The provider now uses the chat API with JSON response format. A controlled five-call comparison improved from **2/5 valid structured responses and 3 fallbacks** to **5/5 valid responses and no fallbacks**. This small sample is not a reliability guarantee; the comparison preceded the final deterministic reason-code change. Free-text explanations remain model-generated.
+With `AI_PROVIDER=mock` every recommendation uses the deterministic fallback. Set `AI_PROVIDER=watsonx` and the `WATSONX_*` values in `.env` for real recommendations. Run the tests with `cd backend && python -m pytest`.
 
-Real end-to-end validation covered the earlier backend fallback flow and a later frontend flow with a structured watsonx response: modify an original candidate, record the decision while the task remains pending, then explicitly book and transition to scheduled. Rejection without booking and overnight commitment creation were also confirmed. IBM Granite remains a future validation target because the available Lite/Sydney runtime did not support the planned model.
+## About the public demo
 
-The current MVP is **feature-frozen**. Visual polish is complete. Next priorities are repeatable demo/evidence capture (screenshots/GIF), a final real watsonx revalidation on the two-field contract, deployment planning, presentation/LinkedIn, and optional real-world usage. No new backend features are planned within this freeze.
+- There is no login. Each browser gets a random identifier and only sees its own data. This separates data for a demo; it is **not** authentication.
+- A visitor's data is deleted 24 hours after it is created, and each visitor can request up to 10 recommendations per day. There are also global limits on AI calls and on items per visitor to protect the free watsonx quota.
+- The API runs on a free App Service plan: the first request after a period of inactivity can take about 20 seconds.
+- Dates and times are naive local values on purpose; there is no time-zone redesign.
 
-See [agent context](agents.md), [watsonx validation record](watsonx-validation-plan.md), and [development log](BOB-DEVELOPMENT-LOG.md) for details.
+## Status and validation
+
+The MVP is feature-frozen. Backend suite: **246 passed, 1 skipped** (the skip is the live watsonx smoke test, which needs credentials and passed separately). Frontend build and lint pass. The full flow (task, commitments, real watsonx recommendation, approve/modify/reject, explicit booking, conflict handling, daily limit) was exercised on the public site in both languages, with all test data removed afterwards.
+
+Real watsonx calls were validated with the final two-field contract. The model used is a non-IBM model served through IBM watsonx, because the Lite/Sydney runtime did not offer IBM Granite; Granite remains a future validation target. Reliability figures from small samples are not guarantees.
+
+Known limits: no authentication, a single shared database schema without migrations, no automated frontend interaction tests, naive datetimes, and free-text explanations that may be wrong.
+
+See [agent context](agents.md), [development log](BOB-DEVELOPMENT-LOG.md), [watsonx validation record](watsonx-validation-plan.md), [demo validation report](demo-validation-report.md) and [test report](test-report.md) for details.
