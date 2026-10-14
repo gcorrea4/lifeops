@@ -23,10 +23,37 @@ function detailMessage(detail: unknown): string {
   return 'The request could not be completed.'
 }
 
+// Anonymous visitor identifier: keeps each browser's data separate on the public demo (it is not a login).
+const SESSION_KEY = 'lifeops-session'
+const SESSION_FORMAT = /^[A-Za-z0-9_-]{16,64}$/
+let memorySession = ''
+
+function newSessionId(): string {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function sessionId(): string {
+  try {
+    const stored = localStorage.getItem(SESSION_KEY)
+    if (stored && SESSION_FORMAT.test(stored)) return stored
+    const created = newSessionId()
+    localStorage.setItem(SESSION_KEY, created)
+    return created
+  } catch {
+    // Storage unavailable: keep one identifier for this page load only.
+    if (!memorySession) memorySession = newSessionId()
+    return memorySession
+  }
+}
+
 async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const headers: Record<string, string> = { 'X-Session-Id': sessionId() }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
   const response = await fetch('/api/v1' + path, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   })

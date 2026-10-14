@@ -5,6 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.session import current_user_id, purge_expired
 from app.database import get_db
 from app.models.enums import TaskStatus
 from app.models.task import Task
@@ -13,13 +14,11 @@ from app.services.task import apply_patch
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
-USER_ID = 1  # hardcoded for Week 1 MVP
 
-
-def _get_task_or_404(task_id: int, db: Session) -> Task:
+def _get_task_or_404(task_id: int, user_id: int, db: Session) -> Task:
     task = db.query(Task).filter(
         Task.id == task_id,
-        Task.user_id == USER_ID,
+        Task.user_id == user_id,
     ).first()
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
@@ -27,10 +26,15 @@ def _get_task_or_404(task_id: int, db: Session) -> Task:
 
 
 @router.post("/", response_model=TaskRead, status_code=201)
-def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> Task:
+def create_task(
+    payload: TaskCreate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> Task:
+    purge_expired(db)
     task_data = payload.model_dump()
     task = Task(
-        user_id=USER_ID,
+        user_id=user_id,
         status=TaskStatus.pending,
         **task_data,
     )
@@ -44,16 +48,21 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> Task:
 def list_tasks(
     status: Optional[TaskStatus] = Query(None),
     db: Session = Depends(get_db),
+    user_id: int = Depends(current_user_id),
 ) -> List[Task]:
-    query = db.query(Task).filter(Task.user_id == USER_ID)
+    query = db.query(Task).filter(Task.user_id == user_id)
     if status is not None:
         query = query.filter(Task.status == status)
     return query.all()
 
 
 @router.get("/{task_id}", response_model=TaskRead)
-def get_task(task_id: int, db: Session = Depends(get_db)) -> Task:
-    return _get_task_or_404(task_id, db)
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> Task:
+    return _get_task_or_404(task_id, user_id, db)
 
 
 @router.patch("/{task_id}", response_model=TaskRead)
@@ -61,8 +70,9 @@ def update_task(
     task_id: int,
     payload: TaskUpdate,
     db: Session = Depends(get_db),
+    user_id: int = Depends(current_user_id),
 ) -> Task:
-    task = _get_task_or_404(task_id, db)
+    task = _get_task_or_404(task_id, user_id, db)
     apply_patch(task, payload)
     db.add(task)
     db.commit()
@@ -71,7 +81,11 @@ def update_task(
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_db)) -> None:
-    task = _get_task_or_404(task_id, db)
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> None:
+    task = _get_task_or_404(task_id, user_id, db)
     db.delete(task)
     db.commit()

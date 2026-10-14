@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core import clock
+from app.core.session import current_user_id
 from app.core.settings import settings
 from app.database import get_db
 from app.models.fixed_block import FixedBlock
@@ -23,15 +24,13 @@ from app.services.engine import (
 
 router = APIRouter(prefix="/engine", tags=["engine"])
 
-USER_ID = 1  # hardcoded for Week 1 MVP
-
 LOOKAHEAD_DAYS = 7
 
 
-def _get_task_or_404(task_id: int, db: Session) -> Task:
+def _get_task_or_404(task_id: int, user_id: int, db: Session) -> Task:
     task = (
         db.query(Task)
-        .filter(Task.id == task_id, Task.user_id == USER_ID)
+        .filter(Task.id == task_id, Task.user_id == user_id)
         .first()
     )
     if task is None:
@@ -56,12 +55,13 @@ def suggest(
     task_id: int = Query(...),
     from_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
+    user_id: int = Depends(current_user_id),
 ) -> list[SlotSuggestion]:
     """Return up to 10 candidate slots for a pending task."""
     now = clock.now()
 
     # 1. Load task
-    task = _get_task_or_404(task_id, db)
+    task = _get_task_or_404(task_id, user_id, db)
 
     # 2. Task must be pending
     if task.status != TaskStatus.pending:
@@ -75,7 +75,7 @@ def suggest(
         )
 
     # 4. Load all FixedBlocks for user
-    blocks = db.query(FixedBlock).filter(FixedBlock.user_id == USER_ID).all()
+    blocks = db.query(FixedBlock).filter(FixedBlock.user_id == user_id).all()
 
     # 5. Load ScheduledSlots in the lookahead window (+1 day for overnight overflow)
     window_start = datetime.combine(resolved_from, settings.WORK_START)
@@ -86,7 +86,7 @@ def suggest(
     slots = (
         db.query(ScheduledSlot)
         .filter(
-            ScheduledSlot.user_id == USER_ID,
+            ScheduledSlot.user_id == user_id,
             ScheduledSlot.start_datetime < window_end,
             ScheduledSlot.end_datetime > window_start,
         )
@@ -112,12 +112,16 @@ def suggest(
 
 
 @router.post("/book", response_model=ScheduledSlotRead, status_code=201)
-def book(payload: BookRequest, db: Session = Depends(get_db)) -> ScheduledSlot:
+def book(
+    payload: BookRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> ScheduledSlot:
     """Validate and confirm a booking. Revalidates availability at booking time."""
     now = clock.now()
 
     # 1. Load task
-    task = _get_task_or_404(payload.task_id, db)
+    task = _get_task_or_404(payload.task_id, user_id, db)
 
     # 2. Task must be pending
     if task.status != TaskStatus.pending:
@@ -154,7 +158,7 @@ def book(payload: BookRequest, db: Session = Depends(get_db)) -> ScheduledSlot:
             )
 
     # 5. Load all FixedBlocks for user and revalidate conflicts
-    blocks = db.query(FixedBlock).filter(FixedBlock.user_id == USER_ID).all()
+    blocks = db.query(FixedBlock).filter(FixedBlock.user_id == user_id).all()
 
     booking_day = start_dt.date()
     for block in blocks:
@@ -176,7 +180,7 @@ def book(payload: BookRequest, db: Session = Depends(get_db)) -> ScheduledSlot:
     conflict = (
         db.query(ScheduledSlot)
         .filter(
-            ScheduledSlot.user_id == USER_ID,
+            ScheduledSlot.user_id == user_id,
             ScheduledSlot.start_datetime < end_dt,
             ScheduledSlot.end_datetime > start_dt,
         )
@@ -191,7 +195,7 @@ def book(payload: BookRequest, db: Session = Depends(get_db)) -> ScheduledSlot:
     # 7–9. Create ScheduledSlot + update Task.status atomically
     slot = ScheduledSlot(
         task_id=task.id,
-        user_id=USER_ID,
+        user_id=user_id,
         start_datetime=start_dt,
         end_datetime=end_dt,
     )

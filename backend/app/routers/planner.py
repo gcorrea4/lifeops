@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.ai.agent import PlannerAgent
 from app.ai.provider import AbstractProvider, get_provider
 from app.core import clock
+from app.core.session import current_user_id, enforce_recommendation_limit
 from app.core.settings import settings
 from app.database import get_db
 from app.models.fixed_block import FixedBlock
@@ -43,7 +44,6 @@ from app.services.planner import (
 
 router = APIRouter(prefix="/planner", tags=["planner"])
 
-USER_ID = 1  # hardcoded for MVP
 LOOKAHEAD_DAYS = 7
 
 _DECISION_MESSAGES = {
@@ -58,10 +58,10 @@ _DECISION_MESSAGES = {
 # ---------------------------------------------------------------------------
 
 
-def _get_task_or_404(task_id: int, db: Session) -> Task:
+def _get_task_or_404(task_id: int, user_id: int, db: Session) -> Task:
     task = (
         db.query(Task)
-        .filter(Task.id == task_id, Task.user_id == USER_ID)
+        .filter(Task.id == task_id, Task.user_id == user_id)
         .first()
     )
     if task is None:
@@ -79,6 +79,7 @@ def recommend(
     payload: RecommendRequest,
     db: Session = Depends(get_db),
     provider: AbstractProvider = Depends(get_provider),
+    user_id: int = Depends(current_user_id),
 ) -> RecommendResponse:
     """Get an AI-powered slot recommendation for a pending task.
 
@@ -95,11 +96,14 @@ def recommend(
     """
     now = clock.now()
     # 1. Load task
-    task = _get_task_or_404(payload.task_id, db)
+    task = _get_task_or_404(payload.task_id, user_id, db)
 
     # 2. Task must be pending
     if task.status != TaskStatus.pending:
         raise HTTPException(status_code=409, detail="task is not pending")
+
+    # 2b. Public demo: cap AI recommendations per visitor (the default user is exempt)
+    enforce_recommendation_limit(db, user_id)
 
     # 3. Resolve from_date — default today, reject past (same rule as GET /engine/suggest)
     resolved_from: date = payload.from_date if payload.from_date is not None else now.date()
@@ -107,7 +111,7 @@ def recommend(
         raise HTTPException(status_code=422, detail="from_date cannot be in the past")
 
     # 4. Load all FixedBlocks for user
-    blocks = db.query(FixedBlock).filter(FixedBlock.user_id == USER_ID).all()
+    blocks = db.query(FixedBlock).filter(FixedBlock.user_id == user_id).all()
 
     # 5. Load ScheduledSlots in the lookahead window (+1 day for overnight overflow)
     window_start = datetime.combine(resolved_from, settings.WORK_START)
@@ -118,7 +122,7 @@ def recommend(
     slots_db = (
         db.query(ScheduledSlot)
         .filter(
-            ScheduledSlot.user_id == USER_ID,
+            ScheduledSlot.user_id == user_id,
             ScheduledSlot.start_datetime < window_end,
             ScheduledSlot.end_datetime > window_start,
         )
@@ -186,6 +190,7 @@ def decision(
     payload: DecisionRequest,
     db: Session = Depends(get_db),
     provider: AbstractProvider = Depends(get_provider),  # noqa: ARG001 — required by DI graph
+    user_id: int = Depends(current_user_id),
 ) -> DecisionResponse:
     """Record a human decision (APPROVED / MODIFIED / REJECTED) for a recommendation.
 
@@ -200,7 +205,7 @@ def decision(
     Booking remains a separate explicit client action.
     """
     # 1. Load recommendation
-    rec = get_recommendation_or_404(payload.recommendation_id, db)
+    rec = get_recommendation_or_404(payload.recommendation_id, db, user_id)
 
     # 2–3. Apply decision (service handles double-decision guard and MODIFIED validation)
     record_decision(rec, payload.action, payload.chosen_start, payload.chosen_end, db)

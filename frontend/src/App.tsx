@@ -127,6 +127,7 @@ function App() {
           <h3>{t.aboutTitle}</h3>
           <p>{t.about}</p>
           <p>{t.footer}</p>
+          <p>{t.sessionNote}</p>
         </section>
         <section className="split contact">
           {t.principles.map((item) => <section key={item.title}>

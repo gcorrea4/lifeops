@@ -129,7 +129,7 @@ Validation uses npm run build, npm run lint and manual end-to-end checks. Both c
 
 ### User
 
-No authentication yet. Temporary user_id = 1. Do not imply tenant isolation or production access control.
+No authentication. For the public demo each browser gets a random identifier (`lifeops-session` in localStorage) sent as the `X-Session-Id` header; `app/core/session.py` maps it to a numeric `user_id` (never 1) and every route filters by it, so visitors only see their own tasks, commitments, slots and recommendations. Requests without the header use the default `user_id = 1` (local development, tests, direct API clients), which is exempt from cleanup and limits. Visitor data older than 24 hours is deleted lazily when tasks or commitments are created (at most every 30 minutes per process), and each visitor can request at most 10 recommendations per 24 hours (HTTP 429, detail `daily recommendation limit reached`). This separates data for a demo; it is NOT authentication or access control: anyone who knows an identifier can use it. Do not imply tenant isolation beyond this.
 
 ### FixedBlock
 

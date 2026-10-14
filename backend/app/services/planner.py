@@ -29,7 +29,7 @@ from app.ai.schemas import AgentInput, CandidateSlot, PlannerRecommendation, Tas
 from app.models.ai_recommendation import AIRecommendation, UserAction
 from app.schemas.engine import SlotSuggestion
 
-USER_ID = 1  # hardcoded for MVP
+USER_ID = 1  # default user; HTTP routes pass the visitor's id explicitly
 
 
 # ---------------------------------------------------------------------------
@@ -37,11 +37,11 @@ USER_ID = 1  # hardcoded for MVP
 # ---------------------------------------------------------------------------
 
 
-def get_recommendation_or_404(rec_id: int, db: Session) -> AIRecommendation:
-    """Load an AIRecommendation for user_id=1 or raise 404."""
+def get_recommendation_or_404(rec_id: int, db: Session, user_id: int = USER_ID) -> AIRecommendation:
+    """Load an AIRecommendation owned by user_id (default user when omitted) or raise 404."""
     rec = (
         db.query(AIRecommendation)
-        .filter(AIRecommendation.id == rec_id, AIRecommendation.user_id == USER_ID)
+        .filter(AIRecommendation.id == rec_id, AIRecommendation.user_id == user_id)
         .first()
     )
     if rec is None:
@@ -123,7 +123,7 @@ def persist_recommendation(
 
     rec = AIRecommendation(
         task_id=task.id,
-        user_id=USER_ID,
+        user_id=task.user_id,
         provider=provider_name,
         model_id=model_id,
         candidate_slots_json=candidate_slots_json,
