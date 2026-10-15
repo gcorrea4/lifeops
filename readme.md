@@ -73,4 +73,4 @@ Known limits: no authentication, a single shared database schema without migrati
 
 Possible next steps beyond this MVP: real authentication, calendar integration, persistent data without expiry, and validating an IBM Granite model.
 
-See [agent context](agents.md), [development log](BOB-DEVELOPMENT-LOG.md), [watsonx validation record](watsonx-validation-plan.md), [demo validation report](demo-validation-report.md) and [test report](test-report.md) for details.
+See [agent context](agents.md), [development log](BOB-DEVELOPMENT-LOG.md), [watsonx validation record](docs/watsonx-validation-plan.md), [demo validation report](docs/demo-validation-report.md) and [test report](docs/test-report.md) for details.

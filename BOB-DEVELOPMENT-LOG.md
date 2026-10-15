@@ -82,7 +82,7 @@ At that stage the frontend was a scaffold. Deployment, authentication, additiona
 
 Remaining debt includes nullable date and utcnow deprecations, clock-dependent tests, reason-code semantic consistency, Granite runtime availability and the small reliability sample. Repository inspection also identified booking-window and elapsed-suggestion gaps. These were subsequently fixed under explicit approval, as recorded below.
 
-See agents.md for architecture invariants and operational rules, watsonx-validation-plan.md for validation evidence, and the historical watsonx-e2e-validation-report.md for the original endpoint record.
+See agents.md for architecture invariants and operational rules, docs/watsonx-validation-plan.md for validation evidence, and the historical docs/history/watsonx-e2e-validation-report.md for the original endpoint record.
 
 ## Approved Deterministic Gap Fixes — 2026-10-07
 
@@ -143,7 +143,7 @@ Result: 10/10 valid structured responses, 0 fallbacks, no extra model fields. Re
 
 With explicit authorization to write DEMO data to the development MySQL, the full persisted flow was run against real watsonx (meta-llama/llama-3-3-70b-instruct, au-syd). Preflight found the running API container was stale (image from 2026-10-07 with the pre-governance contract); only the api service was rebuilt and its files verified identical to local source before the run. No code, env or Docker file was changed.
 
-Records: FixedBlocks 3 and 4, Task 9, AIRecommendation 5, ScheduledSlot 3. Flow: recommend 201 with fallback_used=false and backend-derived HIGH_PRIORITY, EARLIEST_SLOT, DEADLINE_CLOSE; human MODIFIED to original candidate 12:00–13:00; after the decision the task was still pending with no new slot; explicit book 201 created the slot and the task became scheduled; MySQL confirmed provider watsonx, the model id, the codes, user_action MODIFIED and matching final slot. Observed caveats: container clock is UTC (host UTC-3), the UI sends no from_date, and the UI path was not exercised in this run. Details, screenshot checklist and GIF sequence are in demo-validation-report.md.
+Records: FixedBlocks 3 and 4, Task 9, AIRecommendation 5, ScheduledSlot 3. Flow: recommend 201 with fallback_used=false and backend-derived HIGH_PRIORITY, EARLIEST_SLOT, DEADLINE_CLOSE; human MODIFIED to original candidate 12:00–13:00; after the decision the task was still pending with no new slot; explicit book 201 created the slot and the task became scheduled; MySQL confirmed provider watsonx, the model id, the codes, user_action MODIFIED and matching final slot. Observed caveats: container clock is UTC (host UTC-3), the UI sends no from_date, and the UI path was not exercised in this run. Details, screenshot checklist and GIF sequence are in docs/demo-validation-report.md.
 
 ## Bilingual UI (EN/PT) — 2026-10-12
 
@@ -247,7 +247,7 @@ Presentation-only CSS polish was completed after the feature freeze (commit 2d2b
 
 Visual polish is complete and no longer pending.
 
-1. Repeatable demo and evidence capture: persisted API-level flow validated 2026-10-10; UI screenshots/GIF still to be captured (checklist in demo-validation-report.md).
+1. Repeatable demo and evidence capture: persisted API-level flow validated 2026-10-10; UI screenshots/GIF still to be captured (checklist in docs/demo-validation-report.md).
 2. Final real watsonx revalidation on the two-field contract: smoke and 10-scenario sample done 2026-10-10; a persisted end-to-end flow is still to be captured with the demo (live calls need explicit authorization).
 3. Deployment planning.
 4. Presentation/LinkedIn.

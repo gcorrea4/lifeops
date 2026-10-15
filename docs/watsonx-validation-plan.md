@@ -81,7 +81,7 @@ Selected slot: 2026-10-08 08:00–09:00. Approval did not book automatically. Bo
 
 This pre-chat backend run demonstrates safe fallback and action separation. The later frontend run below separately demonstrates the persisted post-chat flow without fallback. The original recommendation's raw parsing failure was not recorded; later controlled failures supplied the malformed-JSON diagnosis.
 
-The historical watsonx-e2e-validation-report.md retains detailed pre-chat requests/responses. Its text-generation warning and malformed-output observations describe that earlier phase.
+The historical history/watsonx-e2e-validation-report.md retains detailed pre-chat requests/responses. Its text-generation warning and malformed-output observations describe that earlier phase.
 
 At the time of this real validation, booking lacked an explicit daily work-window guard. A subsequent approved deterministic fix now enforces the full interval within the configured start-date window and excludes nonfuture suggestions. Its isolated suite passed with 186 passed, 1 skipped, 0 failed; no real watsonx calls were rerun for that fix.
 
@@ -154,7 +154,7 @@ MOST_BUFFER_BEFORE_DEADLINE is removed. Extra model fields, including reason_cod
 
 Update 2026-10-10: the smoke was re-run and passed (1 passed), and a 10-scenario synthetic PlannerAgent sample on the final two-field contract returned 10/10 valid responses with 0 fallbacks and correctly derived reason codes (no database, audit rows or bookings involved). A persisted recommend → decision → book flow on the final contract is still pending. The paragraph below is the historical statement written before that revalidation.
 
-The 5/5 post-chat sample, separate live smoke and real recommend → decision → explicit book flow preceded final governance. They were not rerun against the final two-field contract. The sample is small and provides no reliability guarantee. The final local automated suite is **216 passed, 1 skipped, 0 failed**; the only skip is the credential-gated smoke with credentials disabled. See deterministic-reason-codes-plan.md for source-tree validation details.
+The 5/5 post-chat sample, separate live smoke and real recommend → decision → explicit book flow preceded final governance. They were not rerun against the final two-field contract. The sample is small and provides no reliability guarantee. The final local automated suite is **216 passed, 1 skipped, 0 failed**; the only skip is the credential-gated smoke with credentials disabled. See history/deterministic-reason-codes-plan.md for source-tree validation details.
 
 The current MVP is **feature-frozen**. Next priorities:
 
