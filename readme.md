@@ -6,7 +6,17 @@ LifeOps helps organize personal tasks around fixed commitments such as universit
 
 > AI-assisted, human-controlled and auditable by design. A deterministic engine decides what is valid, an AI suggests one option, and the person decides.
 
-<!-- Screenshots: add images here (for example docs/screenshots/*.png). -->
+![LifeOps with the Bob mascot](docs/screenshots/00-bob.gif)
+
+## Screenshots
+
+| Tasks and fixed commitments | Recommendation with explanation |
+|---|---|
+| ![Tasks and fixed commitments](docs/screenshots/01-tasks-and-commitments.png) | ![Recommendation in Portuguese with the model explanation and reason code](docs/screenshots/02-recommendation.png) |
+
+![Decision recorded; booking is a separate explicit action](docs/screenshots/03-decision.png)
+
+The captures show the Portuguese interface in the dark theme: the model's explanation, the backend-derived reason code, the original candidates, and the recorded decision with the separate "book" step.
 
 ## How it works
 
@@ -55,10 +65,12 @@ With `AI_PROVIDER=mock` every recommendation uses the deterministic fallback. Se
 
 ## Status and validation
 
-The MVP is feature-frozen. Backend suite: **246 passed, 1 skipped** (the skip is the live watsonx smoke test, which needs credentials and passed separately). Frontend build and lint pass. The full flow (task, commitments, real watsonx recommendation, approve/modify/reject, explicit booking, conflict handling, daily limit) was exercised on the public site in both languages, with all test data removed afterwards.
+The MVP is feature-frozen. Backend suite: **255 passed, 1 skipped** (the skip is the live watsonx smoke test, which needs credentials and passed separately). Frontend build and lint pass. The full flow (task, commitments, real watsonx recommendation, approve/modify/reject, explicit booking, conflict handling, daily limit) was exercised on the public site in both languages, with all test data removed afterwards.
 
 Real watsonx calls were validated with the final two-field contract. The model used is a non-IBM model served through IBM watsonx, because the Lite/Sydney runtime did not offer IBM Granite; Granite remains a future validation target. Reliability figures from small samples are not guarantees.
 
 Known limits: no authentication, a single shared database schema without migrations, no automated frontend interaction tests, naive datetimes, and free-text explanations that may be wrong.
+
+Possible next steps beyond this MVP: real authentication, calendar integration, persistent data without expiry, and validating an IBM Granite model.
 
 See [agent context](agents.md), [development log](BOB-DEVELOPMENT-LOG.md), [watsonx validation record](watsonx-validation-plan.md), [demo validation report](demo-validation-report.md) and [test report](test-report.md) for details.

@@ -33,7 +33,7 @@ Deterministic rules have priority. AI must never override hard scheduling constr
 
 Historical plans use differing stage numbering in places. Their unchecked boxes and proposed contracts are not the current specification.
 
-Latest backend suite (2026-10-14, after per-visitor sessions and demo protections): **246 passed, 1 skipped**. Previous record — latest isolated automated suite after deterministic reason-code governance: **216 passed, 1 skipped, 0 failed** (2 existing warnings; 217 passed, 1 skipped after the task-delete cascade fix of 2026-10-13). The only skip is the credential-gated watsonx smoke with credentials disabled. This run used the actual local source mounted read-only, not a stale container copy. The separate real smoke previously passed; it was not rerun for this change.
+Latest backend suite (2026-10-14, after the explanation-language option): **255 passed, 1 skipped** (246 passed before it, after per-visitor sessions and demo protections). Previous record — latest isolated automated suite after deterministic reason-code governance: **216 passed, 1 skipped, 0 failed** (2 existing warnings; 217 passed, 1 skipped after the task-delete cascade fix of 2026-10-13). The only skip is the credential-gated watsonx smoke with credentials disabled. This run used the actual local source mounted read-only, not a stale container copy. The separate real smoke previously passed; it was not rerun for this change.
 
 The current MVP is **feature-frozen**. Completed architecture decisions remain closed; the priorities below concern evidence, validation, deployment and presentation.
 
