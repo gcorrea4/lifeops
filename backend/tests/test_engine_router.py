@@ -4,7 +4,7 @@ All tests use the in-memory SQLite database via the shared conftest fixtures.
 No real MySQL connection is needed.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 import pytest
 from app.core import clock

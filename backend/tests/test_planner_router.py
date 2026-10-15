@@ -453,8 +453,6 @@ class TestAuditMetadata:
         the persisted provider/model_id values come from the provider instance, not
         from settings.
         """
-        from app.core.settings import settings as app_settings
-
         # Inject MockProvider regardless of what settings.AI_PROVIDER says.
         provider = MockProvider(fixed_response=_VALID_MOCK_RESPONSE)
         app.dependency_overrides[get_provider] = lambda: provider

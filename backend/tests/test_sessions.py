@@ -11,7 +11,6 @@ from datetime import datetime, time, timedelta, timezone
 import pytest
 
 from app.ai.provider import MockProvider, get_provider
-from app.core import clock
 from app.core.session import (
     DAILY_RECOMMENDATION_LIMIT,
     DEFAULT_USER_ID,
