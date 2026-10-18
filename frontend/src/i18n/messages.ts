@@ -20,6 +20,7 @@ const en = {
   ],
   footer: 'Recommendations are suggestions. Booking rechecks current availability.',
   connectionError: 'Connection interrupted. Refresh the lists to check the outcome before submitting again.',
+  backendPaused: 'The Azure back-end is turned off to avoid charges, so the demo is paused for now. Thanks for your interest!',
   backendErrors: {
     'daily recommendation limit reached': 'Daily recommendation limit reached. Try again tomorrow.',
     'task limit reached': 'Task limit reached for this browser. Delete a task to add another.',
@@ -127,6 +128,7 @@ const pt: Messages = {
   ],
   footer: 'As recomendações são sugestões. O agendamento reverifica a disponibilidade atual.',
   connectionError: 'Conexão interrompida. Atualize as listas para conferir o resultado antes de enviar novamente.',
+  backendPaused: 'O back-end na Azure está desligado para evitar cobranças, então a demo está pausada por enquanto. Obrigado pelo interesse!',
   backendErrors: {
     'The request could not be completed.': 'Não foi possível concluir a requisição.',
     'daily recommendation limit reached': 'Limite diário de recomendações atingido. Tente novamente amanhã.',

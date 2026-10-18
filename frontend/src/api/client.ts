@@ -80,7 +80,8 @@ function translateDetail(message: string, known: Record<string, string>): string
   }).join('; ')
 }
 
-export function errorMessage(error: unknown, t: Pick<Messages, 'connectionError' | 'backendErrors'>): string {
+export function errorMessage(error: unknown, t: Pick<Messages, 'connectionError' | 'backendPaused' | 'backendErrors'>): string {
+  if (error instanceof ApiError && error.status >= 500) return t.backendPaused
   return error instanceof ApiError
     ? `HTTP ${error.status}: ${translateDetail(error.message, t.backendErrors)}`
     : t.connectionError
