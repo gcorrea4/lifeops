@@ -2,6 +2,9 @@
 
 **Demo online / Live demo: https://boblifeops.vercel.app**
 
+> ⏸️ **PT:** o back-end na Azure foi desligado em 18/10/2026 para evitar cobranças, então a página abre, mas as ações mostram que a demo está pausada. Veja o GIF e as capturas abaixo, ou rode localmente. Para religar: [docs/azure-redeploy.md](docs/azure-redeploy.md).
+> **EN:** the Azure back-end was turned off on 2026-10-18 to avoid charges, so the page opens but actions show that the demo is paused. See the GIF and screenshots below, or run it locally.
+
 🇧🇷 [Português](#-português) · 🇺🇸 [English](#-english)
 
 ![LifeOps com o mascote Bob](docs/screenshots/00-bob.gif)

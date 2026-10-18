@@ -338,9 +338,11 @@ Preferred Bob workflow: Plan → human review → Agent implementation → tests
 
 Read README for the external overview, docs/watsonx-validation-plan.md for completed real validation, and BOB-DEVELOPMENT-LOG.md for chronology. docs/history/lifeops-week1-plan.md, docs/history/lifeops-week2-plan.md, docs/history/lifeops-st*-plan.md and the pre-chat docs/history/watsonx-e2e-validation-report.md retain historical proposals/results; their stale unchecked tasks, datetime-output examples and settings-derived audit suggestions must not override current contracts.
 
-## Deployment State (2026-10-13)
+## Deployment State (2026-10-18: Azure deleted, demo paused)
 
-The API runs on Azure App Service (F1, Linux, Python 3.12, South Central US) at `https://lifeops-api-xwc56.azurewebsites.net` with an Azure Database for MySQL Flexible Server (B1ms, East US) in resource group `lifeops-rg`; configuration is in app settings (database, watsonx, `TZ=America/Sao_Paulo`, `DB_SSL_CA=/etc/ssl/certs/ca-certificates.crt`), never in the repository. The frontend is meant for Vercel using `frontend/vercel.json` (rewrite of `/api/*` to the API). F1 limits: about 60 CPU minutes per day, no Always On (cold start of about 20 s after idle), no SLA. The database is a paid resource intended to live about one week; delete the group when done. This remains a demo MVP: no authentication, `user_id` 1, naive datetimes.
+On 2026-10-18 the Azure resource group `lifeops-rg` (App Service, plan and MySQL server) was deleted on purpose to stop the database cost. The Vercel frontend stays online; when the API answers with HTTP 5xx the UI shows a translated "the Azure back-end is turned off to avoid charges" message (`backendPaused` in `messages.ts`, applied in `errorMessage`). To bring the demo back, follow `docs/azure-redeploy.md`, then point `frontend/vercel.json` at the new API host. The paragraph below describes the deployment as it was between 2026-10-13 and 2026-10-18.
+
+The API ran on Azure App Service (F1, Linux, Python 3.12, South Central US) at `https://lifeops-api-xwc56.azurewebsites.net` with an Azure Database for MySQL Flexible Server (B1ms, East US) in resource group `lifeops-rg`; configuration is in app settings (database, watsonx, `TZ=America/Sao_Paulo`, `DB_SSL_CA=/etc/ssl/certs/ca-certificates.crt`), never in the repository. The frontend is meant for Vercel using `frontend/vercel.json` (rewrite of `/api/*` to the API). F1 limits: about 60 CPU minutes per day, no Always On (cold start of about 20 s after idle), no SLA. The database is a paid resource intended to live about one week; delete the group when done. This remains a demo MVP: no authentication, `user_id` 1, naive datetimes.
 
 ## Do Not Implement Yet
 
