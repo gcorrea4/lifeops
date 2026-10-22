@@ -36,8 +36,7 @@ As capturas acima mostram a interface em português no tema escuro: a explicaç�
 | Testes | pytest com testes de integração isolados em SQLite; lint com oxlint no frontend |
 | Infraestrutura | Docker e Docker Compose; demo hospedada na Vercel (frontend), Azure App Service (API) e Azure Database for MySQL |
 
-O IBM Bob apoiou o planejamento e a implementação ao longo do ciclo de desenvolvimento, com revisão humana dos planos antes da implementação pelo Agent. Codex e Claude Code também ajudaram na implementação, validação e documentação; nenhuma ferramenta fez todo o trabalho.
-
+O IBM Bob apoiou o planejamento e a implementação ao longo do ciclo de desenvolvimento, com revisão humana dos planos antes da implementação pelo Agent. 
 ### Como funciona
 
 O LifeOps combina um motor determinístico de disponibilidade com uma camada de recomendação por IA. O motor calcula os horários candidatos a partir das restrições, exclui inícios no passado ou no horário atual e aplica a janela diária de trabalho no agendamento. O modelo devolve apenas o ID de um candidato e uma explicação curta; os códigos de motivo são calculados pelo backend. A IA nunca cria disponibilidade nem inventa datas e horários.
@@ -105,7 +104,7 @@ The captures above show the Portuguese interface in the dark theme: the model's 
 | Tests | pytest with isolated SQLite integration tests; oxlint for the frontend |
 | Infrastructure | Docker and Docker Compose; demo hosted on Vercel (frontend), Azure App Service (API) and Azure Database for MySQL |
 
-IBM Bob supported planning and implementation across the software development lifecycle, with human review of plans before Agent implementation. Codex and Claude Code also assisted with implementation, validation and documentation; no single tool did all of the work.
+IBM Bob supported planning and implementation across the software development lifecycle, with human review of plans before Agent implementation. 
 
 ### How it works
 
